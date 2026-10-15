@@ -1,0 +1,54 @@
+<?php
+/* =============================================================================
+ * Roundcube - configuration LABORATOIRE (config.inc.php)
+ * Labo : meteo-test.lan | IMAP+SMTP locaux, TLS snakeoil -> verif OFF (D1).
+ * EN PROD : verif peer ON (ssl_verify_peer=true) avec Let's Encrypt.
+ * Secret __RC_DES_KEY__ et mot de passe __RC_DB_PW__ injectes au deploiement.
+ * ========================================================================== */
+
+$config = [];
+
+// --- Base : `roundcube`, utilisateur `roundcube` (aucun droit sur `postfix`) --
+$config['db_dsnw'] = 'mysql://roundcube:__RC_DB_PW__@localhost/roundcube';
+
+// --- IMAP : Dovecot local, TLS des la connexion (993) -----------------------
+$config['default_host'] = 'ssl://127.0.0.1';
+$config['default_port'] = 993;
+$config['imap_conn_options'] = [
+    'ssl' => [
+        'verify_peer'      => false,   // LABO (snakeoil). PROD : true.
+        'verify_peer_name' => false,   // LABO (snakeoil). PROD : true.
+    ],
+];
+
+// --- SMTP : submission 587 + STARTTLS + auth SASL (login = %u) ---------------
+$config['smtp_host'] = 'tls://127.0.0.1:587';
+$config['smtp_user'] = '%u';
+$config['smtp_pass'] = '%p';
+$config['smtp_conn_options'] = [
+    'ssl' => [
+        'verify_peer'      => false,   // LABO (snakeoil). PROD : true.
+        'verify_peer_name' => false,   // LABO (snakeoil). PROD : true.
+    ],
+];
+
+// --- Identite ----------------------------------------------------------------
+$config['product_name'] = 'Meteo Madagascar — Labo';
+$config['support_url'] = '';
+$config['des_key'] = '__RC_DES_KEY__';
+$config['username_domain'] = 'meteo-test.lan';  // login court autorise
+$config['language'] = 'fr_FR';
+$config['skin'] = 'elastic';
+
+// --- BARRIERE 5 (Roundcube) : sessions courtes --------------------------------
+$config['session_lifetime'] = 30;          // 30 minutes d'inactivite
+$config['ip_check'] = true;                // session liee a l'IP
+$config['login_rate_limit'] = 5;           // 5 essais / minute / IP (anti-bruteforce)
+
+// --- Plugins ------------------------------------------------------------------
+$config['plugins'] = ['archive', 'zipdownload', 'managesieve'];
+
+// --- Divers --------------------------------------------------------------------
+$config['draft_autosave'] = 300;
+$config['preview_pane'] = true;
+$config['htmleditor'] = 1;

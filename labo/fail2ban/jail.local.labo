@@ -1,0 +1,58 @@
+# =============================================================================
+# Fail2ban - prisons (LABO meteo-test.lan)
+# Fichier : /etc/fail2ban/jail.local
+#
+# 5 PRISONS DU DESIGN :
+#   sshd            -> acces SSH
+#   postfix-sasl    -> bruteforce SMTP authentifie (port 587)
+#   dovecot         -> bruteforce IMAP (ports 143/993)
+#   roundcube-login -> bruteforce webmail (filtre PERSONNALISE, voir
+#                      filter.d/roundcube-login.conf — sans lui la prison
+#                      existe mais ne se declenche JAMAIS)
+#   postfixadmin-login -> bruteforce panneau admin (filtre PERSONNALISE)
+#
+# SECURITE LABO : 127.0.0.1/8 en ignoreip, sinon nos propres tests
+# (swaks, scripts, curl) se feraient bannir. EN PROD : remplacer par les IP
+# du LAN Meteo + la loopback.
+# =============================================================================
+
+[DEFAULT]
+# Jamais de bannissement permanent en labo (bantime court pour tester).
+bantime  = 10m
+findtime = 10m
+maxretry = 5
+# Loopback + LAN labo. PROD : ajouter le sous-reseau du LAN Meteo.
+ignoreip = 127.0.0.1/8 ::1 10.0.2.0/24
+banaction = iptables-multiport
+
+[sshd]
+enabled = true
+port    = ssh
+logpath = %(sshd_log)s
+maxretry = 5
+
+[postfix-sasl]
+enabled = true
+port    = smtp,submissions,submission
+logpath = /var/log/mail.log
+maxretry = 5
+
+[dovecot]
+enabled = true
+port    = pop3,pop3s,imap,imaps,sieve
+logpath = /var/log/dovecot.log
+maxretry = 5
+
+[roundcube-login]
+enabled  = true
+port     = http,https
+filter   = roundcube-login
+logpath  = /var/www/roundcube/logs/errors.log
+maxretry = 5
+
+[postfixadmin-login]
+enabled  = true
+port     = http,https
+filter   = postfixadmin-login
+logpath  = /var/log/apache2/postfixadmin_access.log
+maxretry = 5

@@ -1,0 +1,28 @@
+# =============================================================================
+# Dovecot - source de donnees SQL (LABO)
+# Fichier : /etc/dovecot/dovecot-sql.conf
+#
+# DEUXIEME FRONTIERE (avec le compte Unix distinct) : l'utilisateur MySQL
+# `dovecot` n'a QUE les droits de lecture sur la table `mailbox`.
+# Il ne peut ni ecrire, ni supprimer, ni toucher aux autres bases.
+#
+# SCHEMA PostfixAdmin 3.3 : la table `mailbox` utilise `username` (email
+# complet, cle primaire), PAS `email`. Elle n'a NI colonne home NI uid/gid :
+# le home est reconstruit depuis `maildir`, et uid/gid retombent sur les
+# valeurs globales mail_uid/mail_gid (= vmail) de dovecot.conf.
+# =============================================================================
+
+# PIEGE Dovecot 2.3 : les identifiants MySQL ne sont PAS des settings separes
+# (`user = ...` / `password = ...` -> "Unknown setting"). Ils font partie de
+# la chaine `connect`. De plus `driver = mysql` exige le paquet
+# dovecot-mysql (absent de l'install initiale -> auth totalement inoperante).
+driver = mysql
+connect = host=/var/run/mysqld/mysqld.sock dbname=postfix user=dovecot password=__MVPD_DOVECOT__
+default_pass_scheme = ARGON2ID
+
+# BARRIERE 4 : seules les boites ACTIVES du bon domaine sont visibles.
+# Le `%d` empeche la traversee de domaine (un compte de test.lan ne peut pas
+# se connecter en production.mg meme si la table est commune).
+password_query = SELECT username AS user, password AS password FROM mailbox WHERE username = '%u' AND active = 1 AND domain = '%d'
+user_query = SELECT CONCAT('/var/vmail/', maildir) AS home FROM mailbox WHERE username = '%u' AND active = 1 AND domain = '%d'
+iterate_query = SELECT username AS user FROM mailbox WHERE domain = '%d' AND active = 1

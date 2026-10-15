@@ -1,0 +1,39 @@
+<VirtualHost *:80>
+    ServerName webmail.meteo-test.lan
+    # Labo : redirection HTTP -> HTTPS (comme en prod).
+    Redirect permanent / https://webmail.meteo-test.lan/
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName webmail.meteo-test.lan
+    # Roundcube >= 1.6 : le docroot DOIT etre public_html (index.php n'est
+    # plus a la racine). Le message "point to the /public_html directory"
+    # signifie exactement ca.
+    DocumentRoot /var/www/roundcube/public_html
+
+    # --- TLS : LABO = snakeoil (D1). PROD = Let's Encrypt. -----------------
+    SSLEngine on
+    SSLCertificateFile    /etc/ssl/certs/ssl-cert-snakeoil.pem
+    SSLCertificateKeyFile /etc/ssl/private/ssl-cert-snakeoil.key
+    SSLProtocol -all +TLSv1.2 +TLSv1.3
+
+    # --- PHP-FPM : pool partage en labo (D8). PROD = 2 pools distincts. ----
+    <FilesMatch "\.php$">
+        SetHandler "proxy:unix:/run/php/php8.1-fpm.sock|fcgi://localhost"
+    </FilesMatch>
+
+    <Directory /var/www/roundcube/public_html>
+        Options -Indexes +FollowSymLinks
+        AllowOverride None
+        Require all granted
+    </Directory>
+
+    # --- Durcissement : config/temp/logs sont HORS docroot (inaccessibles).
+    # Double securite au cas ou le docroot serait un jour elargi par erreur.
+    <DirectoryMatch "^/var/www/roundcube/(config|temp|logs)">
+        Require all denied
+    </DirectoryMatch>
+
+    ErrorLog /var/log/apache2/webmail_error.log
+    CustomLog /var/log/apache2/webmail_access.log combined
+</VirtualHost>

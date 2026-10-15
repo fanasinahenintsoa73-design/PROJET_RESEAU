@@ -1,0 +1,24 @@
+# =============================================================================
+# Postfix master.cf — service SUBMISSION (port 587) — LABO
+# A AJOUTER a /etc/postfix/master.cf (script 07-submission-antivrfy.sh).
+# En prod : identique, myhostname/letsencrypt geres dans main.cf.
+#
+# 587 = STARTTLS OBLIGATOIRE + auth SASL (via Dovecot) OBLIGATOIRE.
+# Port 465 volontairement absent (587 suffit ; a verifier en recette pour
+# les vieux clients Apple). Port 25 = MTA-a-MTA, jamais d'auth dessus.
+# =============================================================================
+# NOTE CHROOT : le 5e champ est `n` (PAS de chroot). Avec `y`, le smtpd
+# submission cherche le socket SASL Dovecot dans /var/spool/postfix/... ou il
+# n'existe pas -> "SASL: Connect to auth-client failed: No such file" puis
+# "fatal: no SASL authentication mechanisms" et la connexion TLS est coupee
+# juste apres le EHLO. Le service port 25 reste chrootte (pas de SASL dessus).
+submission inet n       -       n       -       -       smtpd
+  -o syslog_name=postfix/submission
+  -o smtpd_tls_security_level=encrypt
+  -o smtpd_sasl_auth_enable=yes
+  -o smtpd_sasl_type=dovecot
+  -o smtpd_sasl_path=/var/run/dovecot/auth-client
+  -o smtpd_sasl_security_options=noanonymous
+  -o smtpd_recipient_restrictions=permit_sasl_authenticated,reject
+  -o smtpd_reject_unlisted_recipient=no
+  -o milter_macro_daemon_name=ORIGINATING

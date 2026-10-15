@@ -1,0 +1,39 @@
+<VirtualHost *:80>
+    ServerName postfixadmin.meteo-test.lan
+    Redirect permanent / https://postfixadmin.meteo-test.lan/
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName postfixadmin.meteo-test.lan
+    DocumentRoot /opt/postfixadmin/public
+
+    # --- TLS : LABO = snakeoil (D1). PROD = Let's Encrypt. -----------------
+    SSLEngine on
+    SSLCertificateFile    /etc/ssl/certs/ssl-cert-snakeoil.pem
+    SSLCertificateKeyFile /etc/ssl/private/ssl-cert-snakeoil.key
+    SSLProtocol -all +TLSv1.2 +TLSv1.3
+
+    # --- PHP-FPM : pool partage en labo (D8). PROD = pool dedie. -----------
+    <FilesMatch "\.php$">
+        SetHandler "proxy:unix:/run/php/php8.1-fpm.sock|fcgi://localhost"
+    </FilesMatch>
+
+    <Directory /opt/postfixadmin/public>
+        Options -Indexes +FollowSymLinks
+        AllowOverride None
+        Require all granted
+    </Directory>
+
+    # templates_c DOIT rester inscriptible par PHP (cache Smarty).
+    <Directory /opt/postfixadmin/templates_c>
+        Require all denied
+    </Directory>
+
+    # --- PROD : restreindre au LAN (decision conception). -------------------
+    # <Location />
+    #     Require ip 10.0.0.0/8
+    # </Location>
+
+    ErrorLog /var/log/apache2/postfixadmin_error.log
+    CustomLog /var/log/apache2/postfixadmin_access.log combined
+</VirtualHost>

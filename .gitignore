@@ -1,0 +1,20 @@
+# ---------------------------------------------------------------------------
+# Secrets — JAMAIS dans le depot
+# ---------------------------------------------------------------------------
+# Les mots de passe vivent dans le coffre /root/labo-credentials.txt sur le
+# serveur (mode 600) et sont injectes a l'execution par les scripts.
+# Les fichiers *.local.php et config.inc.php deployes ne doivent pas y finir.
+*.local.php.deployed
+config.inc.php
+/creds/
+*credentials*
+*.secret
+*.key
+*.pem
+
+# ---------------------------------------------------------------------------
+# Fichiers de config contenant des placeholders de secret : versionnes
+# volontairement (ils sont des MODELES, pas des secrets).
+# ---------------------------------------------------------------------------
+!labo/web/postfixadmin-config.local.php
+!labo/web/roundcube-config.inc.php.labo

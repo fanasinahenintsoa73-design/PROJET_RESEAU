@@ -1,0 +1,97 @@
+# =============================================================================
+# Postfix - configuration LABORATOIRE
+# Fichier : /etc/postfix/main.cf
+# Labo : meteo-test.lan (domaine fictif, JAMAIS publié en DNS)
+# Ecart prod : en prod on ajoute mynetworks = 10.0.0.0/8 (reseau Meteo)
+# =============================================================================
+
+# --- Identite de la machine -------------------------------------------------
+myhostname = mail.meteo-test.lan
+mydomain = meteo-test.lan
+myorigin = $mydomain
+mydestination = $myhostname, localhost.$mydomain, localhost
+inet_interfaces = all
+inet_protocols = ipv4
+
+# --- Roles ------------------------------------------------------------------
+# APRES la bascule DNS finale : smtpd_relay_restrictions = permit_mynetworks,
+# permit_sasl_authenticated, reject_unauth_destination
+# -> interdiction absolue de relayer vers l'exterieur.
+smtpd_relay_restrictions =
+    permit_mynetworks,
+    permit_sasl_authenticated,
+    reject_unauth_destination
+
+# --- Chiffrement -----------------------------------------------------------
+# LABO : certificat auto-signe (divergence D1). PROD : Let's Encrypt.
+smtpd_tls_security_level = may
+smtpd_tls_auth_only = yes
+smtp_tls_security_level = may
+smtpd_tls_cert_file = /etc/ssl/certs/ssl-cert-snakeoil.pem
+smtpd_tls_key_file = /etc/ssl/private/ssl-cert-snakeoil.key
+smtpd_tls_mandatory_protocols = TLSv1.2 TLSv1.3
+smtpd_tls_protocols = TLSv1.2 TLSv1.3
+smtp_tls_mandatory_protocols = TLSv1.2 TLSv1.3
+smtp_tls_protocols = TLSv1.2 TLSv1.3
+smtpd_tls_mandatory_ciphers = medium
+smtpd_tls_exclude_ciphers = aNULL, eNULL, EXPORT, DES, RC4, MD5, PSK, aECDH, SRP, IDEA
+smtpd_tls_loglevel = 1
+
+# Authentification sur le port 587 (submission) - gere plus tard par Dovecot SASL
+smtpd_sasl_type = dovecot
+smtpd_sasl_path = /var/run/dovecot/auth-client
+smtpd_sasl_auth_enable = yes
+smtpd_sasl_security_options = noanonymous
+smtpd_sasl_local_domain = $mydomain
+smtpd_sasl_authenticated_header = no
+
+# --- Livraison locale ------------------------------------------------------
+# DECISION N1 : Postfix ne lit JAMAIS MariaDB directement.
+# PostfixAdmin ecrit en base, un script exporte vers un fichier plat, `postmap`
+# le compile. Si la base tombe, Postfix continue de livrer.
+virtual_mailbox_domains = meteo-test.lan
+virtual_mailbox_maps = hash:/etc/postfix/postfix_accounts.cf
+# NOTE CHROOT (Debian/Ubuntu) : le transport `virtual` tourne en chroot par
+# defaut dans master.cf. En chroot il ne peut pas resoudre le nom `vmail`
+# (pas de /etc/passwd) et la livraison echoue avec :
+# "warning: bad uid vmail in virtual_uid_maps" + "mail system configuration
+# error". Le script 06-deploy-postfix.sh desactive donc le chroot pour le
+# seul service virtual (`postconf -Me virtual/unix/chroot=n`). Les autres
+# services restent en chroot.
+#
+# RESOLUTION NUMERIQUE : meme hors chroot, `static:vmail` (nom) est refuse par
+# le daemon virtual avec "bad uid vmail in virtual_uid_maps" sur Postfix 3.6
+# alors que l'utilisateur existe. Seule la forme NUMERIQUE fonctionne. Les IDs
+# variant d'une machine a l'autre, c'est 06-deploy-postfix.sh qui injecte
+# `id -u/-g vmail` au deploiement via postconf -e. Portable labo <-> prod.
+virtual_mailbox_base = /var/vmail
+virtual_uid_maps = static:998
+virtual_gid_maps = static:999
+virtual_minimum_uid = 100
+virtual_transport = virtual
+virtual_alias_maps = hash:/etc/postfix/virtual_alias.cf
+
+# --- Anti-recensement (design §5.2) ----------------------------------------
+# VRFY permet de deviner les adresses valides, ETRN de declencher des files.
+# Les deux sont des outils de reconnaissance pour spammeurs.
+disable_vrfy_command = yes
+smtpd_discard_ehlo_keywords = silent-discard, etrn
+
+# --- Divers ----------------------------------------------------------------
+# Les quotas sont appliques par DOVECOT (quota_rule), pas par Postfix.
+# Postfix doit donc etre en illimite (0), sinon son garde-fou par defaut
+# (virtual_mailbox_limit = 51200000 < message_size_limit = 52428800) fait
+# echouer le daemon virtual au demarrage avec :
+# "fatal: virtual_mailbox_limit is smaller than message_size_limit".
+message_size_limit = 52428800
+mailbox_size_limit = 0
+virtual_mailbox_limit = 0
+biff = no
+append_dot_mydomain = no
+readme_directory = no
+compatibility_level = 2
+maillog_file = /var/log/mail.log
+
+# --- Chiffrement des communications avec les autres MTA (chiffrement opportun)
+smtpd_tls_received_header = yes
+# (garder une ligne vide finale : postconf -e colle sinon au dernier parametre)
