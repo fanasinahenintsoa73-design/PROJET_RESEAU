@@ -26,6 +26,42 @@
 - [x] **7. Apache + Roundcube + PostfixAdmin** — Roundcube 1.7.4 (docroot `public_html` obligatoire depuis 1.6), 2 vhosts TLS snakeoil, base `roundcube` (18 tables), IMAP 993 + SMTP 587, fr_FR, login web + vue boîte validés (41 Ko, messagelist).
 - [x] **8. Fail2ban** — 5 prisons actives. Filtre Roundcube = filtre **stock** `roundcube-auth.conf` (le maison est **impossible** : fail2ban prend `<9ind6fld>` pour un tag). Bannissement prouvé de bout en bout sur IP simulée 203.0.113.5 → règle iptables REJECT.
 - [x] **9. 5 comptes + validation bout-en-bout** — 5 comptes fictifs, chaîne complète prouvée 3 fois (SMTP direct, 587 authentifié, webmail).
+- [x] **10. Sauvegardes Restic** — dépôts local + déporté initialisés (2 clés distinctes), sauvegarde quotidienne OK, copie déportée OK, **test de restauration RÉUSSI** (critère n° 5).
+
+## Phase 10 — Sauvegardes (le volet qui manquait)
+
+**Scripts :** `13-backup-init.sh` (dépôts) · `14-backup-daily.sh` (quotidien) · `15-copie-deportee.sh` (hebdo) · `16-test-restauration.sh` (**le test critique**).
+
+**Périmètre implémenté** : `mysqldump` des bases `postfix`+`roundcube` (écrit dans une zone de transit, jamais à moitié sauvegardé) · `/var/vmail` · `/etc/postfix` `/etc/dovecot` `/etc/rspamd` `/etc/ssl` · `/etc/hostname` `/etc/mailname` `/etc/hosts` `/etc/resolv.conf` `/etc/aliases` · `config.local.php` PostfixAdmin · config Roundcube · `/var/lib/rspamd/dkim` (clés DKIM, absent en labo car aucune signature émise).
+**Hors périmètre** : journaux, fichiers temporaires, l'OS lui-même.
+
+**Deux clés distinctes** : dépôt local et dépôt déporté n'ont pas le même mot de passe. Compromettre la sauvegarde locale ne donne pas la copie de secours.
+
+**Résultats mesurés :**
+
+| Étape | Résultat |
+|---|---|
+| `13-backup-init.sh` | 2 dépôts initialisés · `INIT_BACKUP_OK` |
+| `14-backup-daily.sh` | 181 fichiers, 866 Kio, snapshot créé · `BACKUP_OK` |
+| Rétention | `--keep-daily 7 --keep-weekly 4 --prune` |
+| Vérification dépôt | `no errors were found` |
+| `15-copie-deportee.sh` | snapshot `753d8df5` → `5d6fe1a6` (**ID différent = réencryption**) · `COPIE_DEPORTEE_OK` |
+| `16-test-restauration.sh` | **3 messages → 3, identiques** (chemin, `Date:`, taille, mtime) + relus en IMAP |
+
+**Test de restauration — le point clé du projet.** Le script ne vérifie pas que la sauvegarde *a réussi*, il vérifie qu'on peut *en revenir* : relevé de l'état de la boîte → déplacement de la boîte (simule la perte du disque) → restauration → comparaison avant/après → relecture IMAP. Verdict obtenu :
+```
+Date: Thu, 15 Oct 2026 14:42:36 +0000
+Date: Thu, 15 Oct 2026 19:08:52 +0000
+Date: Thu, 15 Oct 2026 19:09:22 +0000
+# VERDICT : RESTAURATION VALIDEE
+```
+
+**Planification** (systemd, 4 fichiers versionnés dans `labo/systemd/`) :
+- `meteo-backup.timer` → quotidien **01:00** + `RandomizedDelaySec=600` (ne pas tomber à la même seconde que les 500 agents) + `Persistent=true` (rattrape un redémarrage)
+- `meteo-copie-deportee.timer` → **dimanche 02:00**, après le backup du dimanche 01:00
+- Chemin d'exécution systemd validé : `meteo-backup.service` → `BACKUP_OK`, `Deactivated successfully`
+
+**Leçon du volet :** une sauvegarde non restaurée n'est pas une sauvegarde. Les 4 scripts ont été écrits puis *réellement exécutés*, 3 défauts du script de restauration ont été trouvés par l'exécution, pas par la relecture.
 
 ## Résultat final — script `labo/scripts/12-validation-finale.sh`
 
@@ -79,6 +115,9 @@
 | D8 | **1 seul pool PHP-FPM** partagé par les 2 vhosts | **2 pools distincts**, aucun include croisé |
 | D9 | Rspamd 2.7 (paquets Ubuntu) | dépôt officiel, Rspamd 3.x |
 | D10 | Pas de Fail2ban sur IP de la machine (`ignoreself`) | test par vraies IP distantes possible |
+| D11 | Dépôt **déporté simulé** sur le même disque (`/srv/sauvegarde-deportee`) | disque **physiquement séparé** du RAID mail, copie hebdo **sortie du bâtiment** |
+| D12 | `/var/lib/rspamd/dkim` absent (aucune signature émise) | présent dès le 1er envoi signé — **ne jamais l'exclure** |
+| D13 | Volume sauvegardé ≈ 866 Kio | 500 boîtes ≈ 1 To (RAID 1 : 2 To utiles) |
 
 ## Journal des sorties
 
@@ -86,6 +125,17 @@
 - Phase 4 : IMAP LOGIN OK, `SELECT INBOX` = 2 messages, FETCH headers corrects, LOGOUT OK.
 - Phase 7 : login web tiana → redirect `?_task=mail` → vue boîte 41 Ko en français.
 - Phase 8 : `fail2ban-regex` 13 matched / 31 lignes ; test E2E 3 échecs → 1 IP bannie → iptables REJECT.
+- Phase 10 : `BACKUP_OK` · `COPIE_DEPORTEE_OK` (ID déporté différent) · `RESTAURATION VALIDEE` (3 msgs identiques, dates intactes).
+
+## Pièges rencontrés dans le volet sauvegarde
+
+- **Le backup pouvait réussir et le script planter après** : `SNAP=$(restic … | grep …)` avec `set -o pipefail` — le `grep` sans correspondance interromp le script **alors que le snapshot était déjà écrit**. Le verdict passe désormais par un `grep` sur le log, jamais par le code de sortie d'un pipeline.
+- **JSON restic sans espace** : `"short_id":"753d8df5"`, pas `"short_id": "…"`. Motif trop strict → échec silencieux, snapshot vide. Deux tentatives successives ont échoué là-dessus.
+- **`restic` 0.12.1 (Ubuntu) n'a pas `--from-repo`** : la syntaxe est `-r` = source, `--repo2` = destination, `-p`/`--password-file` vs `--password-file2`. Vérifié sur `restic copy --help` avant d'écrire, pas après.
+- **`RESTIC_PASSWORD_FILE` plutôt que `RESTIC_PASSWORD`** : le mot de passe dans l'environnement est lisible dans `/proc/<pid>/environ`. Le fichier `/root/.restic-password` est en 600.
+- **`imaplib` imbrique les réponses** : `d[0]` est un *tuple* `(en-tête, littéral)`, `d[1]` vaut `b')'`. Un simple `b"".join(x for x in d if isinstance(x, bytes))` ne récupère que la parenthèse fermante → il faut aplatir les tuples imbriqués.
+- **`set -e` tue le script avant la capture** : un `python3 … ; RC=$?` avorte sur le code de sortie non nul. `set +e` / `set -e` autour du test.
+- **Un chemin absent ne doit pas faire échouer le backup** : `/var/lib/rspamd/dkim` n'existe qu'après la première signature DKIM. Filtré, avec mention explicite `[absent, ignore]`.
 
 ## Journal des sorties
 

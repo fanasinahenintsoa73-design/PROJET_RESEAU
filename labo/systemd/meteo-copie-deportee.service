@@ -1,0 +1,13 @@
+[Unit]
+Description=Copie hebdomadaire de la sauvegarde vers le depot hors site
+Documentation=file:///var/www/roundcube/doc
+After=meteo-backup.service
+Requires=meteo-backup.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/15-copie-deportee.sh
+TimeoutStartSec=7200
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,16 @@
+[Unit]
+Description=Sauvegarde quotidienne de la messagerie - planification
+Documentation=file:///var/www/roundcube/doc
+
+[Timer]
+# Conception : quotidien a 01:00, 7 versions conservees.
+# RandomizedDelaySec evite que les 500 agents et les sauvegardes tombent
+# a la meme seconde chaque nuit sur le disque.
+OnCalendar=*-*-* 01:00:00
+RandomizedDelaySec=600
+# Si la machine etait eteinte a 01:00, la sauvegarde ne doit pas etre
+# sautee pour autant : rattrapage au demarrage.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

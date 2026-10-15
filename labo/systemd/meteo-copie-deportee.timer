@@ -1,0 +1,14 @@
+[Unit]
+Description=Copie hebdomadaire de la sauvegarde - planification
+Documentation=file:///var/www/roundcube/doc
+
+[Timer]
+# Conception : hebdomadaire, hors site. Le dimanche a 02:00, soit apres
+# la sauvegarde du dimanche a 01:00 : on recopie donc bien l'etat le plus
+# recent.
+OnCalendar=Sun *-*-* 02:00:00
+RandomizedDelaySec=900
+Persistent=true
+
+[Install]
+WantedBy=timers.target

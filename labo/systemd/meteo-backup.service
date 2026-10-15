@@ -1,0 +1,20 @@
+[Unit]
+Description=Sauvegarde quotidienne de la messagerie (Restic)
+Documentation=file:///var/www/roundcube/doc
+After=mariadb.service dovecot.service postfix.service
+Requires=mariadb.service
+
+[Service]
+Type=oneshot
+# Le dump des bases ne vaut que si MariaDB tourne ; et la sauvegarde
+# doit partir une fois les services de messagerie en place, sinon on
+# sauvegarde un Maildir incoherent.
+ExecStart=/usr/local/sbin/14-backup-daily.sh
+# Une sauvegarde qui bloque ne doit pas bloquer la machine : 1 h maximum,
+# puis abandon propre.
+TimeoutStartSec=3600
+Nice=10
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=multi-user.target
