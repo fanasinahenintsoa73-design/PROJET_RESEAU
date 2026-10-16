@@ -63,6 +63,49 @@ Date: Thu, 15 Oct 2026 19:09:22 +0000
 
 **Leçon du volet :** une sauvegarde non restaurée n'est pas une sauvegarde. Les 4 scripts ont été écrits puis *réellement exécutés*, 3 défauts du script de restauration ont été trouvés par l'exécution, pas par la relecture.
 
+## Phase 11 — Vérifications de cœur (open relay + DKIM)
+
+Sur les 5 tests encore possibles, **2 seulement touchent le cœur** : l'open relay (critère n° 3 d'ouverture, sécurité) et la signature DKIM (contrôle d'émission). Les 3 autres — import à l'échelle, quota, anti-bruteforce IMAP — relèvent du *préparatif de déploiement*.
+
+### 11.1 Open relay — VALIDÉ 4/4 (`labo/scripts/17-test-open-relay.sh`)
+
+| # | Scénario | Attendu | Résultat |
+|---|---|---|---|
+| 1 | Livraison interne sans authentification | accepté | **250 PASS** |
+| 2 | Relais vers `example.invalid` sans authentification | **refusé** | **554 PASS** |
+| 3 | Relais externe **avec authentification sur 587** | accepté | **250 PASS** |
+| 4 | Contournement par IP brute `victim@[203.0.113.5]` | **refusé** | **554 PASS** |
+
+**Le piège le plus important de cette phase.** Testé depuis `127.0.0.1`, le serveur **accepte** le relais (`250 2.1.5 Ok`), parce que `mynetworks = 127.0.0.1/32 10.0.2.15/32` — la machine se fait confiance à elle-même. **Un test d'open relay lancé depuis la machine locale ne teste rien et donne un faux sentiment de sécurité.** Le script réduit temporairement `mynetworks` à `127.0.0.1/32` pour que la source `10.0.2.15` soit traitée comme extérieure, et restaure par `trap ... EXIT INT TERM`.
+
+Autres pièges : `swaks` n'émet pas de marqueur `***` (la réponse est la ligne suivant `RCPT TO:`) ; Postfix refuse avec **554** aussi bien qu'avec 550 ; Postfix n'annonce `AUTH` sur le 587 **qu'après STARTTLS** (`--tls` obligatoire) ; le port 25 est chrooté et ne voit donc pas le socket SASL — **tous les envois sortants passent par le 587**, c'est la conception.
+
+### 11.2 Signature DKIM — VALIDÉE
+
+Signature obtenue sur les envois authentifiés du 587 :
+```
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=meteo-test.lan;
+	s=dkim; t=1792135232;
+```
+
+**Deux causes racines, ni l'une ni l'autre visibles à la lecture du code :**
+
+1. **`skip_authenticated = true`** dans `local.d/milter_headers.conf`. Or le 587 est le **seul** canal d'envoi sortant de la conception : avec ce réglage, *aucun* message de l'institution n'est traité par Rspamd — ni score, ni signature, et un en-tête `Authentication-Results: ORIGINING;` vide. Passé à `false`. Le coût assumé : Rspamd analyse aussi les envois internes, ce qui empêche un poste infecté d'utiliser la messagerie comme relais.
+2. **Nommage de la clé inversé.** Le modèle de chemin est `"$domain.$selector.key"` → **le domaine vient en premier** : `meteo-test.lan.dkim.key`, et non `dkim.meteo-test.lan.key`. Un nom de fichier dans le désordre ne produit qu'une ligne de journal (`dkim_module_load_key_format: cannot parse raw private key`) et le message part **sans signature, silencieusement**. Voir `labo/rspamd/local.d/dkim_signing.conf`.
+   Piège d'outillage : `rspamadm dkim_keygen` sur Ubuntu 22.04 (Rspamd **2.7**) **affiche la clé sur stdout et n'écrit aucun fichier** — il faut l'option `-k/--privkey`, et le répertoire doit préexister.
+
+**Preuve que la clé survit à une restauration** — c'est le point critique, une clé non restaurée casse *tous* les envois futurs :
+
+| Étape | Résultat |
+|---|---|
+| Clé présente dans le snapshot | `/var/lib/rspamd/dkim/meteo-test.lan.dkim.key` ✓ |
+| Clé **perdue** (déplacée hors du chemin) | répertoire vide |
+| Clé **restaurée** depuis le dépôt | `_rspamd:_rspamd` 640 ✓ |
+| Envoi après restauration | **signature DKIM présente** ✓ |
+
+L'enregistrement DNS à publier est dans `/tmp/dkim-record.txt` :
+`dkim._domainkey IN TXT ("v=DKIM1; k=rsa; " "p=MIIBIjANBgkqhki…")` → à intégrer à la demande DNS de `meteomadagascar.mg` (Partie A, non encore rédigée).
+
 ## Résultat final — script `labo/scripts/12-validation-finale.sh`
 
 **34 PASS / 0 FAIL** — rejoué le 2026-10-15 à 19:07.
@@ -118,6 +161,7 @@ Date: Thu, 15 Oct 2026 19:09:22 +0000
 | D11 | Dépôt **déporté simulé** sur le même disque (`/srv/sauvegarde-deportee`) | disque **physiquement séparé** du RAID mail, copie hebdo **sortie du bâtiment** |
 | D12 | `/var/lib/rspamd/dkim` absent (aucune signature émise) | présent dès le 1er envoi signé — **ne jamais l'exclure** |
 | D13 | Volume sauvegardé ≈ 866 Kio | 500 boîtes ≈ 1 To (RAID 1 : 2 To utiles) |
+| D14 | Signature DKIM **produite** mais **jamais vérifiée** (domaine `.lan`, pas d'enregistrement DNS) | `dkim._domainkey` en TXT à publier, puis `dkim=pass` côté destinataire |
 
 ## Journal des sorties
 
