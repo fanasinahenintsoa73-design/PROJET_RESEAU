@@ -72,18 +72,30 @@ head -2 "${AVANT_FILE}" | sed 's/^/    /'
 # ---------------------------------------------------------------------------
 echo
 echo "[2/5] Selection du snapshot"
-# Le JSON de restic sort `"short_id":"abc"` SANS espace apres les deux
-# points. Un motif trop strict echoue silencieusement : on tolere donc
-# les espaces eventuels.
-SNAP=$(restic -r "${REPO}" snapshots --tag meteo --latest 1 --json 2>/dev/null \
-        | grep -oE '"short_id":[[:space:]]*"[a-f0-9]+"' \
-        | head -1 | cut -d'"' -f4)
+# PIEGE MAJEUR : `restic snapshots --latest 1` ne renvoie PAS "le plus
+# recent". La doc precise "for each host and path" : des snapshots dont
+# le jeu de chemins differ forme des groupes distincts, et l'option en
+# renvoie donc UN PAR GROUPE. Or notre perimetre varie (ex. la cle DKIM
+# fait apparaitre /var/lib/rspamd/dkim : 13 chemins -> 14).
+# Consequence : le premier element du tableau n'est pas forcement le plus
+# recent, et l'on restaurerait un instantane perime en croyant restaurer
+# le dernier.
+# On selectionne donc par horodatage reel, sans se fier a l'ordre ni a
+# --latest.
+SNAP=$(restic -r "${REPO}" snapshots --tag meteo --json 2>/dev/null | python3 -c '
+import json, sys
+snaps = json.load(sys.stdin)
+if not snaps:
+    sys.exit(1)
+print(max(snaps, key=lambda s: s["time"])["short_id"])
+')
 if [ -z "${SNAP}" ]; then
     echo "ERREUR : aucun snapshot exploitable" >&2
     restic -r "${REPO}" snapshots 2>&1 | tail -5 >&2
     exit 1
 fi
-echo "  Snapshot : ${SNAP}"
+NB_TOTAL=$(restic -r "${REPO}" snapshots --tag meteo --json 2>/dev/null | grep -o '"short_id"' | wc -l)
+echo "  ${NB_TOTAL} snapshot(s) disponible(s), retenu : ${SNAP}"
 
 # ---------------------------------------------------------------------------
 # 3. Simulation de perte
@@ -193,8 +205,21 @@ PYEOF
 IMAP_OK=$?
 set -e
 
-# Nettoyage : on remet la boite de cote.
-rm -rf "${BOITE}.SAVEGARDE-TEST"
+# Nettoyage : la copie de securite n'est supprimee que si la
+# restauration a reussi. En cas d'ECHEC on la conserve : c'est la seule
+# copie restante des messages d'origine, la supprimer en cas d'erreur
+# reviendrait a detruire definitivement les donnees qu'on cherchait a
+# proteger.
+if [ "${IDENTIQUE}" -eq 1 ] && [ "${IMAP_OK}" -eq 0 ]; then
+    rm -rf "${BOITE}.SAVEGARDE-TEST"
+    echo
+    echo "Copie de securite supprimee (restauration reussie)."
+else
+    echo
+    echo "*** ECHEC : la copie de securite est CONSERVEE ***"
+    echo "*** ${BOITE}.SAVEGARDE-TEST contient les messages d'origine ***"
+    echo "*** Ne pas l'effacer avant d'avoir diagnostique.           ***"
+fi
 
 echo
 echo "########################################################"

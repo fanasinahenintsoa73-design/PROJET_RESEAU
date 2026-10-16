@@ -181,6 +181,30 @@ L'enregistrement DNS à publier est dans `/tmp/dkim-record.txt` :
 - **`set -e` tue le script avant la capture** : un `python3 … ; RC=$?` avorte sur le code de sortie non nul. `set +e` / `set -e` autour du test.
 - **Un chemin absent ne doit pas faire échouer le backup** : `/var/lib/rspamd/dkim` n'existe qu'après la première signature DKIM. Filtré, avec mention explicite `[absent, ignore]`.
 
+### 🔴 Piège majeur découvert par le test lui-même (16, octobre)
+
+**`restic snapshots --latest 1` ne renvoie PAS « le plus récent ».** La doc dit *« for each host and path »* : des snapshots dont le **jeu de chemins diffère** forment des groupes distincts, et l'option en renvoie **un par groupe**. Symptôme observé :
+```
+restic snapshots --tag meteo --latest 1 --json
+→ 2 snapshots :  84f50971 (06:48, 13 chemins)   3f0bc640 (08:02, 14 chemins)
+```
+Le périmètre avait changé parce que la clé DKIM avait fait apparaître `/var/lib/rspamd/dkim` (13 → 14 chemins). Un `head -1` sur le tableau attrapait le **premier**, pas le plus récent.
+
+**Conséquence en production** : la restauration rétablirait un **instantané périmé** tout en affichant « RESTAURATION VALIDÉE ». Le pire scénario — une fausse assurance.
+
+**Correctif appliqué** (`16-test-restauration.sh`) : sélection par **horodatage réel**, sans `--latest` ni `head -1` :
+```bash
+SNAP=$(restic … snapshots --tag meteo --json | python3 -c '
+import json, sys
+snaps = json.load(sys.stdin)
+if not snaps: sys.exit(1)
+print(max(snaps, key=lambda s: s["time"])["short_id"])')
+```
+
+**Second défaut, plus grave : le test détruisait les données qu'il protégeait.** Le `rm -rf "${BOITE}.SAVEGARDE-TEST"` était inconditionnel — y compris quand la restauration échouait. Les 5 messages du jour ont été perdus au premier essai. **Correctif** : la copie de sécurité n'est supprimée que si la restauration a **réussi** ; en cas d'échec elle est conservée avec un avertissement explicite.
+
+> Ce second défaut est exactement le scénario catastrophe qu'un test de restauration doit couvrir : un script de reprise qui, en cas d'erreur, achève le destruction de la donnée qu'il devait sauver.
+
 ## Journal des sorties
 
 (Les sorties validées de chaque phase sont recopiées ici au fil de l'eau.)
