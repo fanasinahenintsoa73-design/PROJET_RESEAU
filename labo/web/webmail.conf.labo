@@ -17,9 +17,11 @@
     SSLCertificateKeyFile /etc/ssl/private/ssl-cert-snakeoil.key
     SSLProtocol -all +TLSv1.2 +TLSv1.3
 
-    # --- PHP-FPM : pool partage en labo (D8). PROD = 2 pools distincts. ----
+    # --- PHP-FPM : pool DEDIE "roundcube" (ferme D8). ----------------------
+    # Deux pools distincts : Roundcube et PostfixAdmin ne partagent plus
+    # le meme interpreteur PHP (voir labo/prod/php-fpm/roundcube.conf).
     <FilesMatch "\.php$">
-        SetHandler "proxy:unix:/run/php/php8.1-fpm.sock|fcgi://localhost"
+        SetHandler "proxy:unix:/run/php/php8.1-fpm-roundcube.sock|fcgi://localhost"
     </FilesMatch>
 
     <Directory /var/www/roundcube/public_html>
