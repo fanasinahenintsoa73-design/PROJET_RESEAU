@@ -28,10 +28,9 @@ l'opérateur YAS. Cette contrainte oriente tous les choix techniques de ce docum
 | Local des serveurs | **Sécurisé** → pas de chiffrement du disque au repos |
 | Topologie machines | Serveur web et serveur mail séparés, aucune machine mutualisée |
 
-Le site web étant derrière Cloudflare sur une autre IP, **les ports 80 et 443 de `41.207.49.27`
-sont libres**. Il n'y a aucun conflit de port, aucun partage de NAT et aucune raison de toucher
-à la configuration du site existant. C'est ce qui rend ce déploiement simple et sans risque
-pour la production en place.
+> ⚠️ **Correction du 21 octobre 2026 (après vérification sur le terrain).** Ce paragraphe disait : « les ports 80 et 443 de `41.207.49.27` sont libres ». **C'est faux.** Une plateforme interne de gestion des sous-domaines (« Portail Météo ») répond déjà sur `41.207.49.27:80` et `:443` : elle y sert `mail.meteomadagascar.mg` et `adl.meteomadagascar.mg`, ce dernier avec un certificat Let's Encrypt valide. Voir le **§ 4.4** pour l'architecture qui en découle.
+>
+> Ce qui reste vrai : le site `meteomadagascar.mg` est sur une autre IP (`102.16.63.110`, derrière Cloudflare) et **n'est pas touché** par ce projet. Le courrier (ports 25, 587, 993, 4190) ne passe pas par le Portail : il est pointé en direct sur le serveur mail. **Le Portail ne devient une dépendance que du *webmail*.**
 
 ---
 
@@ -98,9 +97,12 @@ est faite par le MikroTik.
 587/tcp   soumission  envoi authentifié (STARTTLS)
 993/tcp   IMAPS       accès des clients
 4190/tcp  ManageSieve  filtres Roundcube
-443/tcp   Roundcube + PostfixAdmin
-80/tcp    temporaire : uniquement l'émission du certificat Let's Encrypt (HTTP-01)
 ```
+
+**Ports 80 et 443 : retirés de cette liste (correction du 21 octobre 2026).** Ils sont **déjà
+tenus par le Portail Météo** sur `41.207.49.27`. Le webmail y arrive par le reverse-proxy du
+Portail (voir § 4.4) ; notre Apache n'écoute qu'en **HTTP interne** sur 8080 (webmail) et 8081
+(administration). Aucun port supplémentaire n'est donc à ouvrir.
 
 **POP3 (110/995) est volontairement absent.** Aucun client moderne ne l'utilise ; cela supprime
 une surface d'attaque. Si un agent en a besoin, la règle NAT s'ajoutera à ce moment-là.
@@ -144,6 +146,51 @@ les boîtes mail. Aucun `include` croisé entre les deux arborescences.
 `webmail.meteomadagascar.mg` et `postfixadmin.meteomadagascar.mg` sont deux vhosts Apache
 distincts, avec deux pools PHP-FPM distincts et deux comptes Unix distincts.
 
+### 4.4 Le webmail passe par le Portail Météo (correction du 21 octobre 2026)
+
+**Constat de terrain.** `mail.meteomadagascar.mg` est déjà servi par une plateforme interne de
+gestion des sous-domaines (« Portail Météo »), qui occupe les ports **80 et 443** de
+`41.207.49.27`. Cette plateforme ne fait **pas** de DNS : elle crée des **vhosts nginx** avec un
+champ « IP cible », et sait délivrer un certificat par elle-même. `adl.meteomadagascar.mg` prouve
+que le mécanisme fonctionne déjà.
+
+**Conséquence directe :** notre Apache **ne peut pas** prendre le 443 public, et Let's Encrypt
+**HTTP-01 est impossible** (port 80 déjà pris) comme **DNS-01** (pas d'API sur la zone, qui est
+chez Stellarix). **La seule voie praticable pour un certificat valide sur `webmail.` est donc la
+plateforme.**
+
+**Architecture cible :**
+
+```
+Agent → https://webmail.meteomadagascar.mg
+      → nginx du Portail          (TLS Let's Encrypt terminé ici)
+      → proxy HTTP
+      → http://<serveur mail>:8080  (Apache, HTTP simple)
+      → Roundcube → IMAP/SMTP → Dovecot + Postfix
+```
+
+**`mail.` reste le nom SMTP/IMAP** (ports 25, 587, 993, 4190 pointés en direct sur le serveur
+mail : le Portail n'y touche pas). **`webmail.` est le nom web**, en reverse-proxy. Le Portail
+devient donc une dépendance du **webmail**, pas de la **messagerie** : s'il tombe, IMAP et SMTP
+continuent de fonctionner.
+
+**Le serveur mail n'écoute qu'en HTTP interne** : vhost `webmail` sur le port **8080**, vhost
+`postfixadmin` sur le port **8081** (restreint au réseau interne de la DG et à l'IP du Portail).
+Le TLS n'est jamais terminé deux fois.
+
+**Trois réglages Roundcube sont obligatoires** dans ce mode (vérifiés dans le code de
+Roundcube 1.7.4) :
+
+| Réglage | Rôle | Conséquence de l'oubli |
+|---|---|---|
+| `use_https = true` | déclare la connexion sécurisée malgré l'absence de `$_SERVER['HTTPS']` | URLs générées en `http://…:8080` → *mixed content*, redirection HTTPS cassée |
+| `proxy_whitelist = ['<IP du Portail>']` | seule l'IP du proxy est autorisée à injecter `X-Forwarded-*` | les en-têtes du proxy sont ignorés → hôte et port faux ; de plus, **tous les agents seraient vus sous l'IP du Portail** (conséquence sur `ip_check` et le rate-limit) |
+| `trusted_host_patterns = ['webmail.meteomadagascar.mg', …]` | refuse un en-tête `Host` injecté | vol d'identifiants par en-tête `Host` |
+
+**Le cas de routage** (un seul réglage à basculer à l'ouverture du SSH) : si le Portail est sur le
+LAN → « IP cible » = IP **privée** du serveur mail ; sinon → IP **publique**. Le `dst-nat 443`
+du § 5.2 est **à supprimer** dans les deux cas.
+
 ---
 
 ## 5. Conception réseau MikroTik
@@ -173,17 +220,23 @@ add chain=dstnat action=dst-nat protocol=tcp in-interface=ether1 dst-port=25  to
 add chain=dstnat action=dst-nat protocol=tcp in-interface=ether1 dst-port=587 to-addresses=<IP_PRIVEE_MAIL>
 add chain=dstnat action=dst-nat protocol=tcp in-interface=ether1 dst-port=993 to-addresses=<IP_PRIVEE_MAIL>
 add chain=dstnat action=dst-nat protocol=tcp in-interface=ether1 dst-port=4190 to-addresses=<IP_PRIVEE_MAIL>
-add chain=dstnat action=dst-nat protocol=tcp in-interface=ether1 dst-port=443 to-addresses=<IP_PRIVEE_MAIL>
 ```
+
+> ⚠️ **Correction du 21 octobre 2026.** La règle `dst-port=443` a été **retirée** : le 443 public
+> de `41.207.49.27` est **déjà tenu par le Portail Météo** (voir § 4.4). Le webmail y arrive par
+> le reverse-proxy du Portail, pas par une redirection de port. Le 443 n'est donc **ni ouvert ni
+> redirigé** par le MikroTik.
 
 **Note sur le port 80.** Let's Encrypt n'a besoin du port 80 que **pendant l'émission du
 certificat** (challenge HTTP-01). Une fois le certificat obtenu, cette redirection peut être
-supprimée — c'est une réduction d'attaque gratuite. Deux options au choix :
+supprimée — c'est une réduction d'attaque gratuite.
 
-- **HTTP-01 (recommandé ici)** : ouvrir 80 le temps de l'émission, puis le fermer. Aucun
-  mécanisme de renouvellement automatique à maintenir.
-- **DNS-01** : 80 reste fermé en permanence, mais le renouvellement exige un accès API à la zone
-  DNS. À retenir si le port 80 doit être fermé même temporairement.
+> ⚠️ **Correction du 21 octobre 2026.** Cette option est **caduc** : le port 80 public est déjà
+> pris par le Portail, et le certificat de `webmail.` est **délivré par la plateforme** (route
+> `/ssl` de son API), pas par Let's Encrypt sur notre IP. **Ni HTTP-01 ni DNS-01 ne sont donc
+> applicables** : le renouvellement du certificat `webmail.` relève de l'équipe qui administre le
+> Portail, et non de nous. Le certificat du **serveur mail lui-même** (aucun nom public n'est
+> directement servi par Apache) n'est pas concerné.
 
 **Le masquillage ne doit s'appliquer qu'aux serveurs de la liste `mailservers`.** Un masquilage
 appliqué à tout le LAN peut réécrire le trafic de réponse d'un SMTP entrant, au point où Postfix
@@ -282,12 +335,18 @@ jamais en ajouter un second.
 
 ### 6.3 Confort des agents
 
-| Enregistrement | Rôle |
-|---|---|
-| `autodiscover.meteomadagascar.mg` | Outlook et Thunderbird découvrent le serveur seuls |
-| `autoconfig.meteomadagascar.mg` | idem pour les autres clients |
-| `webmail.meteomadagascar.mg` | webmail, séparé du serveur pour permettre un durcissement distinct |
-| `postfixadmin.meteomadagascar.mg` | console d'administration |
+| Enregistrement | Rôle | Qui le crée |
+|---|---|---|
+| `autodiscover.meteomadagascar.mg` | Outlook et Thunderbird découvrent le serveur seuls | zone DNS (Stellarix) |
+| `autoconfig.meteomadagascar.mg` | idem pour les autres clients | zone DNS (Stellarix) |
+| `webmail.meteomadagascar.mg` | webmail, en reverse-proxy derrière le Portail | **le Portail** (voir § 4.4) + zone DNS |
+| `postfixadmin.meteomadagascar.mg` | console d'administration, **restreinte au réseau interne** | zone DNS (Stellarix), sans pointerie publique |
+
+> **Correction du 21 octobre 2026.** `webmail.meteomadagascar.mg` **n'existait pas** au moment de la
+> vérification DNS, et `mail.meteomadagascar.mg` est **déjà occupé par le Portail**. La
+> création du sous-domaine `webmail.` et la délivrance de son certificat relèvent de
+> **l'équipe qui administre le Portail** (son API pilote la configuration nginx et sait délivrer
+> un certificat), et non de nous.
 
 ### 6.4 La console d'administration n'est pas publique
 
@@ -298,11 +357,22 @@ entre prend le contrôle de toute la messagerie.
 web qui n'accepte que les adresses du réseau interne de la Météo. L'administrateur y accède depuis
 le bureau. Les agents n'y ont jamais accès.
 
+**Mise en œuvre retenue :** le vhost d'administration écoute sur le port **8081** et la règle
+Apache est une liste blanche (`Require ip`) : boucle locale + plage réseau de la DG + IP du
+Portail. Aucun nom public ne pointe donc vers lui. Le DNS n'est même pas nécessaire pour y accéder
+depuis le LAN.
+
 ### 6.5 Précaution Cloudflare
 
 Le site est derrière Cloudflare. `mail.meteomadagascar.mg` doit être en **nuage gris (DNS seul)**.
 Passé en nuage orange, le trafic SMTP et IMAP ne fonctionnerait pas — le proxy ne relaie pas ces
 protocoles. À vérifier avant toute chose.
+
+> **Correction du 21 octobre 2026.** La zone DNS de `meteomadagascar.mg` n'est **pas** chez
+> Cloudflare mais chez **Stellarix** (serveurs `ns.stellarix.africa`). La précaution reste
+> applicable en principe (aucun enregistrement de messagerie ne doit passer en proxy), mais
+> **c'est Stellarix qu'il faut contacter**, et non Cloudflare. Le site `www.meteomadagascar.mg`
+> (`102.16.63.110`) est, lui, bien derrière Cloudflare — et n'est pas touché par ce projet.
 
 ### 6.6 Reverse DNS (prerequisite bloquant)
 
@@ -331,18 +401,27 @@ Internet │
 
 ### 7.2 Chiffrement des transports
 
-Un certificat Let's Encrypt couvre `mail`, `webmail` et `postfixadmin`. HTTP-01 est possible car
-le port 80 est libre.
-
 | Emplacement | Exigence |
 |---|---|
 | Soumission (587) | STARTTLS obligatoire, sinon refus de l'authentification |
 | IMAP (993) | TLS dès la connexion, jamais antérieur à TLS 1.2 |
 | SMTP entrant (25) | TLS **optionnel** — imposé par certains Gmail, refusé par d'autres segments antérieurs |
-| Webmail / admin (443) | TLS obligatoire |
+| Webmail (443) | TLS obligatoire, **terminé par le Portail** (voir § 4.4) |
 
 Le SMTP entrant reste tolérant : refuser les messages sans TLS casserait la réception depuis des
 réseaux d'états africains.
+
+> ⚠️ **Correction du 21 octobre 2026.** Ce paragraphe annonçait un certificat Let's Encrypt
+> unique couvrant `mail`, `webmail` et `postfixadmin`, obtenu en HTTP-01 « car le port 80 est
+> libre ». **Les deux présupposés sont faux** : le port 80 est tenu par le Portail (HTTP-01
+> impossible) et la zone DNS est chez Stellarix, sans API (DNS-01 impossible).
+> **Conséquence :** le certificat de `webmail.` est **délivré par le Portail** (route `/ssl` de
+> son API). Aucun nom public n'est plus directement servi par notre Apache, qui ne travaille
+> qu'en **HTTP interne** (8080 / 8081) entre le Portail et lui — le saut du Portail vers notre
+> serveur se fait en clair **sur le réseau interne**, ce qui est acceptable si et seulement si
+> ce réseau est maîtrisé (à vérifier : si le réseau n'est pas maîtrisé, ce saut doit être
+> chiffré). `postfixadmin.` n'a pas d'enregistrement public et reste accessible en 8081 par
+> liste blanche d'adresses.
 
 ### 7.3 Fail2ban
 
@@ -374,6 +453,13 @@ fasse glisser la réputation de tout le serveur.
 **ClamAV n'analyse que les pièces jointes**, pas les corps de mail. À cette échelle, un scan
 complet ferait chuter visiblement la délivrabilité pour un bénéfice faible — la surface d'attaque
 réelle d'une messagerie institutionnelle, ce sont les pièces jointes.
+
+> **Validé en labo le 21 octobre 2026** (ClamAV 1.5.4, test de référence à 4 cas) : message sain
+> **accepté** ; pièce jointe binaire EICAR **refusée** (554 5.7.1) ; pièce jointe **texte** EICAR
+> **refusée** ; EICAR placé dans le **corps** **accepté** — le corps n'est jamais scanné, comme
+> voulu. Une surprise favorable : contrairement à ce que la documentation du module laisse croire,
+> les pièces jointes de type texte **sont** analysées. La surface réelle est donc : toute pièce
+> jointe jusqu'à 20 Mo est analysée, le corps ne l'est pas.
 
 ### 7.5 Durcissement des composants
 
@@ -634,6 +720,8 @@ Complément : une copie hebdomadaire sur disque chiffré, sortie du bâtiment.
 | A2 | Enregistrement DNS : MX, SPF, `autodiscover`, sous-domaines web | contrôle de la zone — disponible |
 | A3 | Configuration MikroTik : NAT + pare-feu | accès admin routeur — disponible |
 | A4 | Validation du matériel : 32 Go RAM + RAID 1 | budget |
+| **A5** | **Sous-domaine `webmail.` + certificat, créés par le Portail** | **équipe qui administre le Portail** — voir § 4.4. Sans lui, le webmail n'a pas de certificat valide. |
+| **A6** | **Enregistrement DNS `dkim._domainkey`** (clé publique produite par le serveur) | zone DNS — **doit suivre A1 et précéder l'activation du DMARC** |
 
 ### Partie B — nécessite l'accès SSH au serveur
 
@@ -693,3 +781,34 @@ que les pièces jointes Excel ne s'ouvrent pas.
 - Double serveur (mail / webmail) : documenté comme plan B si une disponibilité contractuelle
   est exigée.
 - 2FA sur la console d'administration : non natif dans PostfixAdmin, hors version 1.
+
+---
+
+## 14. Journal des corrections de ce document
+
+Ce document a été écrit **avant** toute vérification sur le terrain. Les paragraphes ci-dessous
+ont été **corrigés** le 21 octobre 2026, après constat sur l'infrastructure existante et
+validation en laboratoire. Ils sont conservés en place (et non réécrits) pour que la trace du
+raisonnement reste visible.
+
+| § | Ce qui était écrit | Ce qui est vrai |
+|---|---|---|
+| 1.1 | « les ports 80 et 443 de `41.207.49.27` sont libres » | **faux** : le Portail Météo les tient déjà (il y sert `mail.` et `adl.`) |
+| 3.3 | ports ouverts 25, 587, 993, 4190, **443**, 80 temporaire | seuls **25, 587, 993, 4190** sont ouverts ; le webmail passe par le Portail |
+| 4.3 | (inexistant) | nouveau § 4.4 : architecture du reverse-proxy du Portail et les trois réglages Roundcube obligatoires |
+| 5.2 | `dst-nat` sur 443, port 80 pour Let's Encrypt | règle 443 **retirée** ; HTTP-01 et DNS-01 **impossibles** |
+| 6.3 | `webmail.` comme enregistrement ordinaire | créé par le **Portail**, pas par la zone DNS |
+| 6.5 | « le site est derrière Cloudflare » | la zone DNS est chez **Stellarix** ; le site est bien derrière Cloudflare, mais sur une autre IP |
+| 7.2 | un certificat Let's Encrypt unique, HTTP-01 possible | certificat de `webmail.` **délivré par le Portail** ; notre Apache ne sert qu'en HTTP interne |
+| 7.4 | ClamAV prévu | **validé en labo** : 4/4 au test EICAR, le corps n'est jamais scanné |
+| 11 | Partie A = PTR, DNS, MikroTik, matériel | **+ A5** (sous-domaine et certificat via le Portail) et **+ A6** (enregistrement DKIM) |
+
+**La leçon à retenir** : les hypothèses de conception fondées sur une infrastructure décrite de
+seconde main (« les ports sont libres ») ont été fausses, et une seule d'entre elles — le 443
+déjà pris — a changé l'architecture. **Toute affirmation sur l'infrastructure existante doit être
+vérifiée avant d'en dépendre**, a fortiori quand elle est au centre d'un plan.
+
+**Où est la suite ?** Le carnet d'exécution `docs/superpowers/plans/2026-10-14-labo-mail-execution.md`
+contient l'état réel du laboratoire (34/34 aux critères de validation, sauvegarde et restauration
+validées, open relay 4/4, DKIM signé, antivirus opérationnel), le tableau des divergences
+labo/production (D1 à D22) et la checklist de ce qui reste à demander à l'encadrant.

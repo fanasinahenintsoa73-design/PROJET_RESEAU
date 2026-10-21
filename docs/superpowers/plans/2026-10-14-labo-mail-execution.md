@@ -308,6 +308,50 @@ Le cas 4 est celui qui **valide la décision de conception n° 4** : le corps du
 | D21 | `clamav-freshclam` **forcé au premier lancement** (signatures téléchargées à la main) | téléchargement automatique au démarrage + surveillance de l'expiration des signatures |
 | D22 | `rspamd` 2.7 : `scan_text_mime = false` mais les **pièces jointes texte sont quand même analysées** (mesuré) | comportement attendu identique en 3.x, mais **à re-mesurer** après le passage en 3.x (une option 3.x pourrait changer ce comportement) |
 
+## Ce qui reste à demander à l'encadrant — checklist interne
+
+> **Note d'usage.** Ce bloc est un **outil de travail interne**, pas un document à remettre. La décision prise est : l'utilisateur **explique oralement** à l'encadrant à la fin du projet, et l'encadrant fait les demandes manuellement. Aucun document n'est produit ici.
+
+### A. Ce qui bloque la messagerie (à demander en premier)
+
+| # | Demande | À qui | Pourquoi c'est critique |
+|---|---|---|---|
+| A1 | **PTR (enregistrement inverse)** de `41.207.49.27` → un nom de la DG | **YAS** (hébergeur) | **Chemin critique.** Sans PTR, le courrier **reçu** de Gmail/Outlook arrive en spam ou n'arrive pas. Le déploiement technique peut réussir et la messagerie rester inutilisable. Délai possible : plusieurs semaines. |
+| A2 | **Accès SSH** au serveur mail (compte dédié + clé publique, `sudo` limité) | Encadrant / service informatique | conditionne toute la phase B (installation, mise à jour, durcissement) |
+| A3 | **Matériel** : 32 Go RAM + 2 × 2 To SSD en **RAID 1** | Service informatique | 500 boîtes × 2 Go = 1 To sur 2 To utiles. En dessous de 16 Go : arrêt net (verdict go/no-go). |
+
+### B. Ce qui fait tourner le webmail
+
+| # | Demande | À qui | Détail |
+|---|---|---|---|
+| B1 | **Créer le sous-domaine `webmail.meteomadagascar.mg`** dans le Portail | Équipe qui administre le Portail | le Portail pilotant la configuration nginx, c'est **lui** qui crée le sous-domaine et délivre le certificat (TLS). `mail.` est déjà pris par le Portail, c'est `webmail.` qui portera le webmail. |
+| B2 | **Pointer le sous-domaine vers le serveur mail** | Équipe Portail | le Portail a un champ « IP cible » : y mettre l'IP du serveur mail — **privée** si le Portail est sur le LAN, **publique** sinon — et le port **8080** (notre Apache y sert en HTTP simple, le TLS étant terminé par le Portail). |
+| B3 | **Un compte administrateur du Portail** | Équipe Portail | pour créer et rectifier le sous-domaine soi-même, sans repasser par une demande à chaque fois |
+
+### C. Ce qui fait sortir et entrer le courrier (DNS)
+
+| # | Demande | À qui | Détail |
+|---|---|---|---|
+| C1 | **SPF — fusionner** (ne pas ajouter une seconde ligne) | Stellarix (zone DNS) | le SPF existant est strict et **ne contient pas notre IP**. Il faut y ajouter `ip4:41.207.49.27` **avant** le `-all`. Deux enregistrements SPF = `permerror` = plus rien ne sort. |
+| C2 | **MX** — ajouter `mail.meteomadagascar.mg` en **priorité 30** | Stellarix | le MX existant (DTS, priorités 5 et 20) reste prioritaire le temps de la bascule. |
+| C3 | **DMARC en `p=none`** (+ adresse `rua` de collecte) | Stellarix | observation d'abord, 2 à 4 semaines, **jamais** `p=reject` d'emblée. |
+| C4 | **Enregistrement DKIM** `dkim._domainkey` en **TXT** | Stellarix | la clé publique est produite par le serveur (déjà générée et validée en labo). Sans elle, les messages sortants ne sont pas signés. |
+| C5 | **Pointeur `webmail.`** (enregistrement A) | Stellarix ou Portail | selon qui crée le sous-domaine (B1). |
+
+> **Ordre impératif** : SPF → DKIM → **attendre 48 h** → DMARC `p=none`. Activer DMARC avant que DKIM soit publié fait rejeter les envois légitimes de l'institution.
+
+### D. Ce qui relève du réseau (quand l'utilisateur sera sur place)
+
+| # | Demande | Détail |
+|---|---|---|
+| D1 | **Accès MikroTik** | ouverture des ports 25, 587, 993, 4190, 443 ; limitation du port 25 (`connection-rate=20/min`) ; blocage de `postfixadmin.` hors LAN ; désactivation de telnet/ftp/www/api/UPnP. **Le 443 public est déjà tenu par le Portail** — ne pas essayer de le prendre. |
+
+### E. Questions ouvertes à trancher avec l'encadrant
+
+- **Combien de comptes réels ?** La conception dimensionne pour **500 maximum** (stations régionales comprises) ; l'évocation courante est **300-400**. Le quota total (1 To sur 2 To utiles) tient dans les deux cas, mais la procédure d'import, les tests et le pilote sont à dimensionner sur le chiffre réel.
+- **Qui écrit et maintient le code ?** Le skin `meteo` a été écrit **sans une ligne de PHP** précisément pour que personne n'ait à le maintenir. Cette contrainte doit rester vraie : **ne pas introduire de plugin PHP** sans décision explicite.
+- **Faut-il garder le Portail comme intermédiaire du webmail ?** Il est le seul chemin pour obtenir un certificat valide sur `webmail.` aujourd'hui, mais il devient un **point de rupture** : s'il tombe, le webmail tombe (IMAP et SMTP, eux, continuent de fonctionner).
+
 ## Journal des sorties
 
 - Phase 5 : swaks tiana→luc « 250 Ok: queued » ; 2 fichiers dans `new/` ; headers Return-Path/Delivered-To/Received + From/To/Subject + body intacts.
