@@ -29,6 +29,7 @@
 - [x] **10. Sauvegardes Restic** — dépôts local + déporté initialisés (2 clés distinctes), sauvegarde quotidienne OK, copie déportée OK, **test de restauration RÉUSSI** (critère n° 5).
 - [x] **11. Cœur** — open relay 4/4, signature DKIM opérationnelle, 34/34 revalidés.
 - [x] **12. Interface Roundcube « meteo »** — skin de surcouche (zéro PHP) : logo institutionnel, palette, tableau de bord d'accueil, gros boutons, page de connexion. **Zéro 404** à l'audit.
+- [x] **12 bis. Modèles de rédaction** — 5 modèles institutionnels déployés par le mécanisme **natif** `compose_responses_static` : globaux, sans SQL, sans ligne par utilisateur. Insertion dans l'éditeur vérifiée (0 → 582 caractères).
 
 ## Phase 10 — Sauvegardes (le volet qui manquait)
 
@@ -129,6 +130,25 @@ L'enregistrement DNS à publier est dans `/tmp/dkim-record.txt` :
 **Garde-fou du script 19** : il refuse de déployer `styles/styles.css` ou `styles/styles.min.css` dans le skin (ces fichiers **remplaceraient** la feuille complète d'`elastic`) et **audite en HTTP toutes les ressources citées** par la page — code de sortie = nombre d'échecs. C'est ce qui a détecté la régression n° 1.
 
 **Validation (Playwright, certificat auto-signé D1)** : page de connexion → logo Météo 207×91 + en-tête « Météo Madagascar / Messagerie institutionnelle — Direction Générale de la Météorologie » ; après connexion → **zéro 404**, logo Météo 78×36, tableau de bord 387×172 avec 4 tuiles, police `Roboto` (d'`elastic`) bien appliquée, interface en français.
+
+### Les modèles de rédaction — mécanisme NATIF, zéro développement
+
+**Ce qu'il ne faut PAS faire :** la table `responses` de Roundcube est **par utilisateur** (`user_id` avec clé étrangère vers `users`), et les comptes Roundcube n'existent qu'**après la première connexion**. Pré-remplir des modèles par SQL obligerait à pré-créer 300-400 lignes `users` — fragile, et les comptes qui n'ont jamais connecté resteraient sans modèle.
+
+**Ce qu'il faut faire : `$config['compose_responses_static']`** (mécanisme natif, lu dans `program/include/rcmail.php`, `get_compose_responses()` / `get_compose_response()`) :
+- les modèles sont **globaux** : visibles par tous les agents, dès la première connexion, **sans aucune ligne SQL** ;
+- ils sont listés **avant** les modèles personnels de l'agent ;
+- un agent **ne peut pas les supprimer** (ils ne sont pas dans SA table `responses`) — c'est voulu, ce sont des modèles de l'institution ;
+- structure d'une entrée : `name` (libellé), `text` (corps texte brut) et/ou `html` (corps HTML, prioritaire) ;
+- l'identifiant interne est `static-<md5(name)[0:16]>`.
+
+**Fichiers** : `labo/web/roundcube-reponses-static.php` (les modèles, **versionnés**) · `labo/scripts/20-deploy-reponses.sh` (déploiement). Le fichier des modèles est **distinct de `config.inc.php`** — qui porte les secrets et n'est donc pas versionné ; le script y injecte un `require_once __DIR__ . '/reponses-static.php';` idempotent, après sauvegarde `.bak.<date>`.
+
+**Les 5 modèles** : *Bulletin météorologique — diffusion* · *Signalement d'observation — station* · *Demande de relevé / de données — station* · *Demande d'intervention technique* · *Accusé de réception*. Chaque corps est un formulaire à crochets `[ ]` que l'agent remplit (Roundcube ne substitue aucun placeholder).
+
+**Validation fonctionnelle (Playwright)** : menu « Réponses » de la fenêtre de rédaction → les 5 modèles listés avec leurs identifiants `static-` ; clic sur *Signalement d'observation* → le corps passe de **0 à 582 caractères**, texte du modèle et crochets intacts, **zéro erreur HTTP**. La page *Paramètres → Réponses* affiche également les 5 modèles.
+
+> **Piège d'automatisation** : le champ de rédaction est `TEXTAREA#composebody` (et non `#compose-body`), et l'éditeur HTML est une iframe `#rcmbody` qui n'existe pas tant que l'éditeur texte brut est actif. Les liens du menu sont dans un `#responses-menu` **caché** : un `locator.click()` échoue avec « Element is not visible » → passer par `element.click()` en JavaScript ou ouvrir d'abord le déclencheur `a.responses`.
 
 ## Architecture cible en production — le Portail Météo
 
