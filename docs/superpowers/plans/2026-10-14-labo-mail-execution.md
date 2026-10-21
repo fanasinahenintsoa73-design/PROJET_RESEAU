@@ -243,9 +243,65 @@ Le cas 4 est celui qui **valide la décision de conception n° 4** : le corps du
 
 > **Piège Freshclam** : le service tourne en arrière-plan et **verrouille son journal** → il faut `systemctl stop clamav-freshclam` avant de le lancer en avant-plan. Et un `curl` manuel sur `database.clamav.net` renvoie 403/429 sans User-Agent, et **écrase `main.cvd` avec 17 octets** (« error code: 1015 ») → supprimer et laisser `freshclam` faire son travail (206 avec `-L` et `User-Agent: ClamAV/1.5.4`).
 
+## Phase 15 — Migration Rspamd 2.7 → 4.2.2 (dépôt officiel) — D9 fermée
+
+**Pourquoi.** Les paquets Ubuntu 22.04 fournissent Rspamd **2.7** (2019), que le projet Rspamd ne supporte pas. La production doit utiliser le dépôt officiel : sans cela, on valide en laboratoire une pile que la production n'exécutera pas. C'était **le dernier écart de version de la pile** (D9).
+
+**Contrainte de poste.** L'hôte Windows n'a que **9,5 Go libres** sur C: → une seconde VM Ubuntu 24.04 de répétition est **infeasible** (OS + pile mail + 1,2 Go de signatures ClamAV dépassent la place disponible). La voie retenue : **installer Rspamd depuis le dépôt officiel dans la VM 22.04 existante** (snapshot VirtualBox `03-avant-rspamd3` pris avant l'opération).
+
+### Le dépôt officiel a changé d'adresse — et le site renvoie du HTML sur tout
+
+| Ce qu'on cherchait | Réponse réelle |
+|---|---|
+| `https://rspamd.com/rspamd.repo` (ancienne procédure) | **n'existe plus** → renvoie la page d'accueil du site |
+| `https://rspamd.com/apt-stable/gpg.key` | ✅ **vraie clé** (4 036 o, `-----BEGIN PGP PUBLIC KEY BLOCK-----`) |
+| `https://rspamd.com/apt-stable/dists/jammy/Release` | ✅ **vrai fichier** (commence par `Origin: Rspamd`) |
+| `https://docs.rspamd.com/downloads/` | ✅ **la documentation officielle** (le site rspamd.com est une application monopage) |
+
+> **Piège de vérification** : `rspamd.com` renvoie sa page HTML (**54 364 o, HTTP 200**) pour **toute** URL, y compris des chemins inexistants. Un simple « code 200 » ne prouve donc rien — il faut vérifier le **type de contenu** et les **premiers octets** (un vrai `Release` commence par `Origin:`, une vraie clé par `-----BEGIN`).
+
+Procédure réelle (versionnée dans `labo/scripts/23-install-rspamd-officiel.sh`) :
+```bash
+sudo mkdir -p /etc/apt/keyrings
+curl -fsSL https://rspamd.com/apt-stable/gpg.key | gpg --dearmor > /etc/apt/keyrings/rspamd.gpg
+echo "deb [signed-by=/etc/apt/keyrings/rspamd.gpg] https://rspamd.com/apt-stable/ jammy main" \
+     > /etc/apt/sources.list.d/rspamd.list
+```
+Versions publiées : **jammy 3.3 minimum** (version courante **4.2.2**), noble 3.9 minimum, resolute 4.2.2 ; bullseye et focal ne sont plus servis. Les paquets officiels sont compilés avec **Hyperscan (amd64) + LuaJIT embarqué + Jemalloc**.
+
+### Trois pièges d'installation (tous contournés, tous documentés dans le script)
+
+1. **Conffile supprimé + stdin fermé = blocage.** `DEBIAN_FRONTEND=noninteractive` ne supprime **pas** l'invite de conffile ; lancé sans terminal, dpkg lit EOF et échoue (`dpkg: erreur de traitement du paquet rspamd (--configure)`). → `dpkg --configure -a --force-confnew`.
+2. **Désinstallation incomplète = configuration invalide.** Après installation, `/etc/rspamd/` ne contenait que les conffiles : il manquait `settings.conf`, `logging.inc` et **22 fichiers de `modules.d/`** (dont `dkim_signing.conf` et `milter_headers.conf`) → `rspamadm configdump` échouait (`ucl parser error: cannot open file /etc/rspamd/settings.conf`) alors que `dpkg --audit` était vide et que `dpkg -L` annonçait 116 fichiers. Le `.deb` était complet (vérifié par `dpkg-deb -c`) : c'était l'**état dpkg**, pas le paquet. `apt-get install --reinstall` ne corrige **rien** (dpkg juge les fichiers déjà installés) → il faut **`dpkg --purge` puis réinstaller**. *Contrôle ajouté au script : comparer `dpkg -L` avec l'existence réelle des fichiers.*
+3. **La purge emporte `/var/lib/rspamd/dkim`.** Ce répertoire n'appartient pas au paquet mais il a été supprimé : **la clé privée DKIM a disparu**, donc tous les envois signés sont devenus impossibles. Elle a été **restaurée depuis la sauvegarde Restic** (`restic restore latest --target / --include /var/lib/rspamd/dkim`, droits `_rspamd:_rspamd` 640 réappliqués) → **la sauvegarde a fait ses preuves une fois de plus**. La restauration ciblée par `--include` évite d'écraser la configuration 4.x, que le snapshot contient aussi dans sa version 2.7.
+
+### Ce qui a changé dans la configuration entre 2.7 et 4.x (cartographié dans le code)
+
+- En 3.x/4.x, les modules sont **réécrits en Lua** (`/usr/share/rspamd/plugins/*.lua`) ; `/usr/lib/rspamd/modules/` n'existe plus.
+- **La règle de `local.d` est inchangée et uniforme** : un fichier de `local.d` ne doit contenir **que le corps du module**, jamais l'enveloppe `module { }` (l'inclusion se fait à l'intérieur du bloc du module). Vérifié pour `antivirus`, `dkim_signing`, `milter_headers`, `actions`. → **les 4 fichiers `local.d` du labo sont valides tels quels en 4.x** (comparaison par `diff` : identiques).
+- `dkim_signing` : le modèle de chemin par défaut reste `"$domain.$selector.key"` → la clé `meteo-test.lan.dkim.key` reste correcte, et mes réglages 2.7 sont **identiques aux défauts 4.x** (`selector="dkim"`, `sign_authenticated=true`, `sign_local=true`, `allow_envfrom_empty=true`).
+- `milter_headers` : `skip_authenticated` n'agit plus que sur l'**ajout** d'en-têtes, plus sur le traitement global → en 4.x la signature DKIM des messages authentifiés fonctionnerait même avec `skip_authenticated=true`. On conserve `false` (sémantique 2.7 + en-têtes `Authentication-Results` utiles aux agents).
+- `antivirus` : **`attachments_only` est déprécié** (remplacé par `scan_mime_parts`, avec avertissement) ; le scanner ClamAV reste **TCP uniquement**.
+
+### Scripts mis à jour
+- `labo/scripts/08-deploy-rspamd.sh` : ajout du déploiement de **`dkim_signing.conf`** (absent du déploiement précédent), `install -o root -g _rspamd -m 640` au lieu de `cp`+`chown`+`chmod`, **génération de la clé DKIM** si absente (avec le nommage exact `$domain.$selector.key`), et **contrôles de structure 4.x** sur **fichier temporaire** (jamais sur un pipe) : refus de continuer si `nested section` ou `unknown antivirus type` apparaît, présence effective de `clamav` et `dkim_signing` dans la configuration effective.
+- `labo/scripts/23-install-rspamd-officiel.sh` (nouveau) : clé GPG (avec contrôle du type de contenu) + liste de sources + purge/install propre + contrôle d'intégrité `dpkg -L` vs fichiers réels + restauration de la clé DKIM (copie locale ou sauvegarde Restic) + redéploiement de `local.d` + validation.
+
+### Résultats mesurés après migration
+| Contrôle | Résultat |
+|---|---|
+| `rspamd --version` | **4.2.2** (Hyperscan ✓, LuaJIT ✓, Jemalloc ✓) |
+| `rspamadm configtest` | syntax OK |
+| `12-validation-finale.sh` | **34 PASS / 0 FAIL** — aucune régression |
+| ClamAV (`test-clamav-eicar.py`) | **4/4** : sain accepté · EICAR binaire refusé 554 · EICAR texte refusé 554 · EICAR dans le **corps** accepté (le corps n'est jamais scanné) |
+| DKIM | `DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=meteo-test.lan;` présent sur les envois via 587 |
+| Open relay (`17-test-open-relay.sh`) | **4/4** : relais externe refusé, relais authentifié accepté, contournement par IP brute refusé |
+
+> **Conséquence sur les seuils** : la **ligne de base du score a changé** entre 2.7 et 4.x (0.95 en 2.7 → −0.10 / 0.40 en 4.x pour un message sain). Le seuil de rejet reste à **15** et le test GTUBE est toujours rejeté → pas d'action requise, mais c'est un repère à connaître avant de comparer des scores entre les deux versions (→ D23).
+
 ## Résultat final — script `labo/scripts/12-validation-finale.sh`
 
-**34 PASS / 0 FAIL** — rejoué le 2026-10-21 après la phase 14 (ClamAV) : aucune régression, **8 services** `active` (postfix, dovecot, rspamd, apache2, mariadb, fail2ban, redis-server, clamav-daemon).
+**34 PASS / 0 FAIL** — rejoué le 2026-10-21 après la phase 14 (ClamAV) et la phase 15 (Rspamd 4.2.2) : aucune régression, **8 services** `active` (postfix, dovecot, rspamd, apache2, mariadb, fail2ban, redis-server, clamav-daemon).
 
 | Bloc | Critères |
 |---|---|
@@ -293,7 +349,7 @@ Le cas 4 est celui qui **valide la décision de conception n° 4** : le corps du
 | D6 | ~~ClamAV écarté~~ → **ClamAV 1.5.4 en place, 4/4 au test EICAR** | **identique** — la barrière ③ est désormais réelle des deux côtés |
 | D7 | `emailcheck_resolve_domain = false` (`.lan` ne résout pas) | **doit rester `true`** |
 | D8 | ~~1 seul pool PHP-FPM~~ → **2 pools distincts** (`roundcube` sous `www-data`, `postfixadmin` sous `pfa`) | **identique** — plus d'écart, la clôture a été faite en labo (phase 13) |
-| D9 | Rspamd 2.7 (paquets Ubuntu) | dépôt officiel, Rspamd 3.x — **seul écart de version restant sur la pile** |
+| D9 | ~~Rspamd 2.7 (paquets Ubuntu)~~ → **Rspamd 4.2.2 (dépôt officiel rspamd.com)** | **identique** — plus aucun écart de version sur la pile (phase 15) |
 | D10 | Pas de Fail2ban sur IP de la machine (`ignoreself`) | test par vraies IP distantes possible |
 | D11 | Dépôt **déporté simulé** sur le même disque (`/srv/sauvegarde-deportee`) | disque **physiquement séparé** du RAID mail, copie hebdo **sortie du bâtiment** |
 | D12 | `/var/lib/rspamd/dkim` absent (aucune signature émise) | présent dès le 1er envoi signé — **ne jamais l'exclure** |
@@ -306,7 +362,9 @@ Le cas 4 est celui qui **valide la décision de conception n° 4** : le corps du
 | D19 | Certificat **snakeoil** sur le simulateur de Portail (8444) | TLS Let's Encrypt terminé par le **Portail** (`POST /api/subdomains/:id/ssl`) |
 | D20 | `ipCible` du Portail simulé en `127.0.0.1` | à trancher à l'ouverture du SSH : IP **privée** (Portail sur le LAN) ou **publique** (Portail hors LAN) — un seul jeton à basculer dans `parametres-prod.env` |
 | D21 | `clamav-freshclam` **forcé au premier lancement** (signatures téléchargées à la main) | téléchargement automatique au démarrage + surveillance de l'expiration des signatures |
-| D22 | `rspamd` 2.7 : `scan_text_mime = false` mais les **pièces jointes texte sont quand même analysées** (mesuré) | comportement attendu identique en 3.x, mais **à re-mesurer** après le passage en 3.x (une option 3.x pourrait changer ce comportement) |
+| D22 | `scan_text_mime = false` mais les **pièces jointes texte sont quand même analysées** (mesuré en 2.7) | **re-mesuré en 4.2.2 : comportement identique** (EICAR en PJ texte refusé 554). Reste à revérifier à chaque montée de version de Rspamd |
+| D23 | **Ligne de base du score Rspamd différente** : 0.95 en 2.7 → −0.10 / 0.40 en 4.2.2 pour un message sain (seuil de rejet inchangé à 15) | idem — ne **jamais** comparer un score de labo à un score de prod d'une autre version |
+| D24 | La **purge dpkg** emporte `/var/lib/rspamd/dkim` (la clé DKIM n'appartient pas au paquet) | Conséquence réelle d'un changement de version de Rspamd : **restaurer la clé depuis la sauvegarde avant de purger**, ou la réappliquer après (le script `23-install-rspamd-officiel.sh` le fait) |
 
 ## Ce qui reste à demander à l'encadrant — checklist interne
 
@@ -354,6 +412,8 @@ Le cas 4 est celui qui **valide la décision de conception n° 4** : le corps du
 
 ## Journal des sorties
 
+- Phase 15 : Rspamd **4.2.2** (Hyperscan ✓, LuaJIT ✓, Jemalloc ✓) · `configtest` OK · structure `local.d` validée (pas de section imbriquée) · **34 PASS / 0 FAIL** · ClamAV **4/4** · open relay **4/4** · DKIM signé sur tous les envois 587.
+- Durabilité : `12-validation-finale.sh` et `17-test-open-relay.sh` installés dans **`/usr/local/sbin/`**. Ils vivaient dans `/tmp/labo-backup/`, que le redémarrage **vide** — c'est ce qui avait fait perdre les scripts de sauvegarde lors du test navigateur. Les scripts de déploiement doivent tous vivre dans `/usr/local/sbin/`, pas dans `/tmp`.
 - Phase 5 : swaks tiana→luc « 250 Ok: queued » ; 2 fichiers dans `new/` ; headers Return-Path/Delivered-To/Received + From/To/Subject + body intacts.
 - Phase 4 : IMAP LOGIN OK, `SELECT INBOX` = 2 messages, FETCH headers corrects, LOGOUT OK.
 - Phase 7 : login web tiana → redirect `?_task=mail` → vue boîte 41 Ko en français.

@@ -84,7 +84,7 @@ est faite par le MikroTik.
 | **Dovecot** | Stockage Maildir, IMAP, Sieve | 993, 4190 |
 | **MariaDB** | Comptes/quotas (PostfixAdmin) + sessions Roundcube | localhost uniquement |
 | **Rspamd** | Antispam, antivirus, limitation de débit | aucun |
-| **ClamAV** | Analyse des pièces jointes via Rspamd | socket Unix |
+| **ClamAV** | Analyse des pièces jointes via Rspamd | aucun (127.0.0.1:3310) |
 | **Roundcube** | Webmail du personnel | 443 |
 | **PostfixAdmin** | Console d'administration | 443, accès réseau interne |
 | **Restic** | Sauvegardes incrémentales dédupliquées | aucun |
@@ -461,6 +461,21 @@ réelle d'une messagerie institutionnelle, ce sont les pièces jointes.
 > les pièces jointes de type texte **sont** analysées. La surface réelle est donc : toute pièce
 > jointe jusqu'à 20 Mo est analysée, le corps ne l'est pas.
 
+> **Version de Rspamd — le dépôt officiel, pas les paquets de la distribution.** Rspamd 4.x est
+> installé depuis le dépôt officiel `rspamd.com` (clé GPG + `apt-stable`), **pas** depuis les
+> paquets de la distribution : ceux-ci fournissent 2.7, que le projet ne supporte plus, et
+> valideraient en laboratoire une pile que la production n'exécutera pas. Le scanner ClamAV est
+> joigné **en TCP sur 127.0.0.1:3310** (le socket Unix `clamd.ctl` n'est pas exploitable par le
+> module). Deux conséquences à connaître avant toute intervention : la **ligne de base du score change**
+> entre les versions (0.95 en 2.7, ≈0 en 4.2.2 pour un message sain ; le seuil de rejet reste à
+> 15), et une **désinstallation du paquet emporte le répertoire `/var/lib/rspamd/dkim`** — donc la
+> clé privée de signature, qu'il faut **restaurer depuis la sauvegarde** avant de purger.
+> Détail opératoire : la configuration de `local.d` s'inclut **à l'intérieur** du bloc de son
+> module. Un fichier de `local.d` qui redéclarerait l'enveloppe (`antivirus { antivirus { … } }`)
+> produirait une section imbriquée — Rspamd la signale « nested section » puis **ignore le
+> module**, sans scanner la moindre pièce jointe et sans message d'erreur visible du côté
+> Postfix. Les fichiers de `local.d` ne contiennent donc **que le corps** de leur module.
+
 ### 7.5 Durcissement des composants
 
 **Postfix** : pas d'open relay, pas de `vrfy`/`etrn` (recensement d'utilisateurs), rejet des
@@ -801,6 +816,7 @@ raisonnement reste visible.
 | 6.5 | « le site est derrière Cloudflare » | la zone DNS est chez **Stellarix** ; le site est bien derrière Cloudflare, mais sur une autre IP |
 | 7.2 | un certificat Let's Encrypt unique, HTTP-01 possible | certificat de `webmail.` **délivré par le Portail** ; notre Apache ne sert qu'en HTTP interne |
 | 7.4 | ClamAV prévu | **validé en labo** : 4/4 au test EICAR, le corps n'est jamais scanné |
+| 7.4 | (version de Rspamd non précisée) | **Rspamd 4.2.2 depuis le dépôt officiel** (les paquets de la distribution fournissent 2.7, non supporté) — la pile du labo est désormais identique à celle de la production |
 | 11 | Partie A = PTR, DNS, MikroTik, matériel | **+ A5** (sous-domaine et certificat via le Portail) et **+ A6** (enregistrement DKIM) |
 
 **La leçon à retenir** : les hypothèses de conception fondées sur une infrastructure décrite de
@@ -811,4 +827,4 @@ vérifiée avant d'en dépendre**, a fortiori quand elle est au centre d'un plan
 **Où est la suite ?** Le carnet d'exécution `docs/superpowers/plans/2026-10-14-labo-mail-execution.md`
 contient l'état réel du laboratoire (34/34 aux critères de validation, sauvegarde et restauration
 validées, open relay 4/4, DKIM signé, antivirus opérationnel), le tableau des divergences
-labo/production (D1 à D22) et la checklist de ce qui reste à demander à l'encadrant.
+labo/production (D1 à D24) et la checklist de ce qui reste à demander à l'encadrant.
