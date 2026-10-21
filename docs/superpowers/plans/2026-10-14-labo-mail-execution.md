@@ -30,6 +30,8 @@
 - [x] **11. Cœur** — open relay 4/4, signature DKIM opérationnelle, 34/34 revalidés.
 - [x] **12. Interface Roundcube « meteo »** — skin de surcouche (zéro PHP) : logo institutionnel, palette, tableau de bord d'accueil, gros boutons, page de connexion. **Zéro 404** à l'audit.
 - [x] **12 bis. Modèles de rédaction** — 5 modèles institutionnels déployés par le mécanisme **natif** `compose_responses_static` : globaux, sans SQL, sans ligne par utilisateur. Insertion dans l'éditeur vérifiée (0 → 582 caractères).
+- [x] **13. Cloisonnement web de production** — 2 pools PHP-FPM distincts (`roundcube` / `pfa`), vhosts internes 8080 / 8081, config Roundcube « derrière proxy » (`use_https`, `proxy_whitelist`, `trusted_host_patterns`), simulateur de Portail. 23 PASS / 0 FAIL, limite d'envoi 2 Mo → **50 Mo**.
+- [x] **14. ClamAV sur les pièces jointes** — ClamAV 1.5.4 + module antivirus Rspamd, refus 554 5.7.1 sur EICAR. Test de référence **4/4** (sain accepté, PJ binaire refusée, PJ texte refusée, corps **non** scanné). 34/34 revalidés.
 
 ## Phase 10 — Sauvegardes (le volet qui manquait)
 
@@ -170,13 +172,84 @@ Agent → https://webmail.meteomadagascar.mg
 
 **Cas de routage à trancher à l'ouverture du SSH** (un seul réglage à basculer) : si le Portail est sur le LAN → `ipCible` = IP **privée** du serveur mail ; sinon → IP **publique**. Le `dst-nat 443 → <IP_PRIVEE_MAIL>` du § 5.2 du document de conception est **faux** dans les deux cas : le 443 public est déjà tenu par le Portail.
 
+## Phase 13 — Cloisonnement web de production + mode « derrière le Portail »
+
+**Fichiers versionnés :** `labo/prod/php-fpm/roundcube.conf` · `labo/prod/php-fpm/postfixadmin.conf` · `labo/prod/apache/20-webmail-interne.conf` · `labo/prod/apache/21-postfixadmin-interne.conf` · `labo/prod/parametres-prod.env` · `labo/simulateur/30-portail.conf` · `labo/simulateur/parametres-labo.env` · `labo/simulateur/probe-proxy.php` · `labo/scripts/21-deploy-prod-web.sh`.
+
+**Ce que la phase apporte (D8 fermé) :** les deux vhosts ne partagent plus le même processus PHP.
+
+| Pool | Utilisateur Unix | Socket | `max_children` |
+|---|---|---|---|
+| `roundcube` | `www-data` | `/run/php/php8.1-fpm-roundcube.sock` | 40 |
+| `postfixadmin` | **`pfa`** (créé pour l'occasion) | `/run/php/php8.1-fpm-postfixadmin.sock` | 6 |
+
+Le compte Unix `pfa` **n'existait pas** (le paquet Debian de PostfixAdmin l'avait créé en `postfixadmin`, mais notre déploiement est un tarball dans `/opt/postfixadmin`, en `root:root`). → `config.local.php` en `root:pfa` 640, `templates_c` en `pfa:pfa` 750.
+
+**Le vhost de production** : `Listen 8080` en **HTTP brut** (le TLS est terminé par le Portail), docroot `/var/www/roundcube/public_html`, `SetHandler "proxy:unix:/run/php/php8.1-fpm-roundcube.sock|fcgi://localhost"`, `Require all denied` sur `config|temp|logs`. PostfixAdmin sur `Listen 8081`, restreint à `127.0.0.1` + plage LAN de la DG + IP du Portail. Les deux fichiers sont **paramétrés par jetons** (`@@HOSTNAME_WEBMAIL@@`, `@@IP_PORTAIL@@`, `@@PLAGE_LAN_DGM@@`, `@@IP_MAIL_PRIVEE@@`, `@@IP_MAIL_PUBLIQUE@@`) : le même fichier sert au labo et à la prod, un seul réglage à basculer.
+
+**La configuration Roundcube derrière un proxy** (relevée dans le code source de 1.7.4, c'est ce qui rend la prod possible) :
+
+| Option | Rôle | Sans elle |
+|---|---|---|
+| `use_https = true` | déclare la connexion sécurisée même si `$_SERVER['HTTPS']` n'est pas posé | URLs générées en `http://…:8080` → *mixed content* et redirection HTTPS cassée |
+| `proxy_whitelist = ['<IP du Portail>']` | seule l'IP du proxy est autorisée à injecter `X-Forwarded-*` | les en-têtes du proxy sont **ignorés** → hôte et port faux |
+| `trusted_host_patterns = ['webmail.meteomadagascar.mg', '127.0.0.1', 'localhost']` | refuse un en-tête `Host` injecté | vol d'identifiants par en-tête `Host` |
+| `smtp_helo_host = 'meteomadagascar.mg'` | HELO/hostname SMTP correct | le serveur distant voit `localhost` |
+
+Fonctions utiles du code : `rcube_utils::https_check()` (l.886), `check_proxy_whitelist_ip()` (l.916), `resolve_url()` (l.1641 — *pas* `request_url()`, qui n'existe pas), `server_name()` (l.1011), `remote_ip()` (l.1086). **Conséquence à retenir :** sans `proxy_whitelist`, `ip_check` et `login_rate_limit` verraient **tous les agents sous l'IP du Portail** — le rate-limit de Roundcube compterait l'institution entière.
+
+**Le simulateur de Portail** (`labo/simulateur/30-portail.conf`) rejoue en labo ce que fera le nginx du Portail : TLS (snakeoil) sur **8444**, `RequestHeader set X-Forwarded-*`, `ProxyPass / http://127.0.0.1:8080/`. C'est ce qui permet de valider la chaîne complète **sans** le Portail, sans DNS et sans IP publique.
+
+**Résultat mesuré (23 PASS / 0 FAIL)** : webmail 8080 = 200 · postfixadmin 8081 = 302 · simulateur 8444 = 200 · `HTTPS=oui` · **URL générée = `https://webmail.meteomadagascar.mg`** (aucun port interne) · **connexion réelle à travers le proxy = 302 + cookie `secure` + `Location` relatif** (aucun repli en `http://`) · **limite d'envoi passée de 2 Mo à 50 Mo** (`upload_max_filesize=50M`, `post_max_size=52M`) — les agents de la DG envoient des images radar et des rapports. Validation globale rejouée : **34 PASS / 0 FAIL**, aucune régression.
+
+**4 pièges rencontrés :**
+1. `mod_proxy_http` n'est **pas** chargé par défaut sur Ubuntu → `ProxyPass` vers un backend `http://` échoue avec « No protocol handler was valid for the URL / (scheme 'http') ». → `a2enmod proxy_http` obligatoire.
+2. `systemctl reload apache2` est un redémarrage **gracieux** : vérifier trop tôt donne de faux « connection refused ». → boucle d'attente d'ouverture des ports.
+3. Un pool FPM en `ondemand` **sans requête n'a aucun worker** → `pgrep` sur le nom du pool est un faux test. → vérifier la config déployée et produire une preuve fonctionnelle.
+4. La fonction d'URL absolue est `resolve_url()`, pas `request_url()`.
+
+## Phase 14 — ClamAV sur les pièces jointes (D6 fermé)
+
+**Fichiers versionnés :** `labo/rspamd/local.d/antivirus.conf` · `labo/scripts/22-deploy-clamav.sh` · `labo/scripts/test-clamav-eicar.py`.
+
+Installation : **ClamAV 1.5.4** (paquets Ubuntu 22.04) — `clamav-daemon`, `clamav-freshclam` (tous deux installés **`disabled`**, comme `fail2ban` : `systemctl enable --now` obligatoire, sinon l'antivirus s'arrête au premier redémarrage et la barrière ③ est **coupée en silence**). Signatures téléchargées par `freshclam` : `main.cvd` (89 Mo) + `daily.cvd` (23 Mo) + `bytecode.cvd`.
+
+**Test de référence (4 cas, `test-clamav-eicar.py`) — résultat mesuré le 21 octobre 2026 :**
+
+| # | Cas | Attendu | Obtenu |
+|---|---|---|---|
+| 1 | message sain, sans pièce jointe | accepté | **accepté** ✓ |
+| 2 | pièce jointe **binaire** EICAR (`octet-stream`) | refusé | **554 5.7.1** « virus detecte (Eicar-Test-Signature) » ✓ |
+| 3 | pièce jointe **texte** EICAR (`text/plain`) | refusé | **554 5.7.1** ✓ |
+| 4 | EICAR dans le **corps**, sans pièce jointe | accepté | **accepté** ✓ |
+
+Le cas 4 est celui qui **valide la décision de conception n° 4** : le corps du message n'est jamais scanné, donc la délivrabilité n'est pas dégradée. Le cas 3 est une bonne surprise : contrairement à ce que la documentation du module laisse croire, une pièce jointe **de type texte est bien analysée** — la limitation que j'avais d'abord documentée n'existe pas en réalité.
+
+### Trois pièges de configuration (tous invisibles à la lecture)
+
+1. **Le `local.d` est inclus À L'INTÉRIEUR du bloc `antivirus { }`.** `modules.d/antivirus.conf` contient `.include(try=true,priority=1,duplicate=merge) "$LOCAL_CONFDIR/local.d/antivirus.conf"` **à l'intérieur** de ce bloc. Le `local.d` doit donc contenir **uniquement** `clamav { … }`, **sans** l'enveloppe `antivirus { }`. Redeclarer l'enveloppe produit un bloc **imbriqué** :
+   - `antivirus { antivirus { clamav { … } } }`
+   - Rspamd signale « *nested section … it is likely a configuration error* » et « *unknown antivirus type: antivirus* » ;
+   - et **le module ne scanne rien, silencieusement** : les pièces jointes infectées passent.
+   Le script de déploiement **refuse** de continuer si `nested section` ou `unknown antivirus type` apparaît dans `rspamadm configdump`.
+2. **`TCPSocketAddr` n'existe pas en ClamAV 1.5.4.** L'option d'écoute s'appelle **`TCPAddr`** (`TCPSocketAddr` était valide dans les 0.10x). L'erreur est fatale : `ERROR: Parse error at /etc/clamav/clamd.conf:100: Unknown option TCPSocketAddr` → `clamd` ne démarre pas du tout (`failed` + « Start request repeated too quickly »). Le script supprime toute ligne `TCPSocketAddr` résiduelle avant d'ajouter `TCPAddr 127.0.0.1` (écoute **strictement locale**, le port 3310 n'est pas exposé).
+3. **Rspamd 2.7 ne parle qu'en TCP** au scanner : `lua_scanners/clamav.lua` utilise `tcp.request()` (`host` + `port`) — **pas de socket Unix**. Le socket local de clamd (`/var/run/clamav/clamd.ctl`) ne peut donc pas être utilisé malgré ce que suggère la documentation du module.
+
+### Deux pièges de vérification (le test mentait, pas le système)
+
+4. `rspamadm configtest` et `rspamadm configdump` doivent être lancés **avec les privilèges root** : en simple utilisateur ils échouent sur la lecture des fichiers `local.d` (« Permission denied ») et donnent un **faux négatif** « module absent ».
+5. **`grep -q` + `set -o pipefail` = faux négatif.** `echo "${DUMP}" | grep -q motif` : dès que `grep` trouve une correspondance il quitte, `echo` reçoit un **SIGPIPE**, et le pipeline renvoie **141** → le script conclut « absent » alors que la correspondance est là. Le `configdump` dépasse largement le tampon de 64 Ko, le piège est donc **systématique**, pas aléatoire. → tous les contrôles se font désormais sur un **fichier temporaire**, jamais sur un pipe.
+6. La commande de statistiques est **`rspamc stat`** (client). `rspamadm stat` **n'existe pas** et renvoyait une erreur silencieuse.
+
+> **Piège Freshclam** : le service tourne en arrière-plan et **verrouille son journal** → il faut `systemctl stop clamav-freshclam` avant de le lancer en avant-plan. Et un `curl` manuel sur `database.clamav.net` renvoie 403/429 sans User-Agent, et **écrase `main.cvd` avec 17 octets** (« error code: 1015 ») → supprimer et laisser `freshclam` faire son travail (206 avec `-L` et `User-Agent: ClamAV/1.5.4`).
+
 ## Résultat final — script `labo/scripts/12-validation-finale.sh`
 
-**34 PASS / 0 FAIL** — rejoué le 2026-10-15 à 19:07.
+**34 PASS / 0 FAIL** — rejoué le 2026-10-21 après la phase 14 (ClamAV) : aucune régression, **8 services** `active` (postfix, dovecot, rspamd, apache2, mariadb, fail2ban, redis-server, clamav-daemon).
 
 | Bloc | Critères |
 |---|---|
-| 1. Services | 7 services `active` |
+| 1. Services | 8 services `active` |
 | 2. Ports | 25, 143, 993, 4190, 587, 11332, 443, 80 |
 | 3. Postfix | `postfix check` OK · pont fichier plat (pas de SQL) · VRFY désactivé · Rspamd joignable |
 | 4. Dovecot | `doveconf` valide · auth SQL+Argon2id |
@@ -204,7 +277,7 @@ Agent → https://webmail.meteomadagascar.mg
 |---|---|---|
 | ① MikroTik (pare-feu + port 25 bridé) | **absent** (VM en NAT, pas de routeur) | à faire, phases B/A3 |
 | ② Durcissement noyau + TLS | TLS 1.2 mini, SSL `required` sur Dovecot | durcissement complet |
-| ③ Rspamd | ✅ actif, GTUBE rejeté | + ClamAV sur pièces jointes |
+| ③ Rspamd | ✅ actif, GTUBE rejeté, **ClamAV sur pièces jointes (4/4)** | idem (Rspamd 3.x) |
 | ④ Dovecot (quota + anti-bruteforce) | ✅ quota 2 Go / grâce 5 j | idem |
 | ⑤ Roundcube (limitation tentatives) | ✅ login_rate_limit 5/min + ip_check | idem |
 
@@ -217,10 +290,10 @@ Agent → https://webmail.meteomadagascar.mg
 | D3 | **5 comptes fictifs** | 300–400 comptes réels (même procédure d'import) |
 | D4 | Pas de tests Gmail/Outlook | 5 critères d'ouverture (dont mail-tester ≥ 9/10) |
 | D5 | NAT isolé, 2222→22 | IP publique 41.207.49.27, ports MikroTik |
-| D6 | **ClamAV écarté** (signatures ~1,5 Go, pas de place) | ClamAV sur pièces jointes uniquement |
+| D6 | ~~ClamAV écarté~~ → **ClamAV 1.5.4 en place, 4/4 au test EICAR** | **identique** — la barrière ③ est désormais réelle des deux côtés |
 | D7 | `emailcheck_resolve_domain = false` (`.lan` ne résout pas) | **doit rester `true`** |
-| D8 | **1 seul pool PHP-FPM** partagé par les 2 vhosts | **2 pools distincts**, aucun include croisé |
-| D9 | Rspamd 2.7 (paquets Ubuntu) | dépôt officiel, Rspamd 3.x |
+| D8 | ~~1 seul pool PHP-FPM~~ → **2 pools distincts** (`roundcube` sous `www-data`, `postfixadmin` sous `pfa`) | **identique** — plus d'écart, la clôture a été faite en labo (phase 13) |
+| D9 | Rspamd 2.7 (paquets Ubuntu) | dépôt officiel, Rspamd 3.x — **seul écart de version restant sur la pile** |
 | D10 | Pas de Fail2ban sur IP de la machine (`ignoreself`) | test par vraies IP distantes possible |
 | D11 | Dépôt **déporté simulé** sur le même disque (`/srv/sauvegarde-deportee`) | disque **physiquement séparé** du RAID mail, copie hebdo **sortie du bâtiment** |
 | D12 | `/var/lib/rspamd/dkim` absent (aucune signature émise) | présent dès le 1er envoi signé — **ne jamais l'exclure** |
@@ -230,6 +303,10 @@ Agent → https://webmail.meteomadagascar.mg
 | D16 | Un seul enregistrement de peau en base (`$config['skin']`) | **purger la préférence `skin`** stockée par agent à l'import des 300-400 comptes, sinon un agent peut rester sur l'ancienne peau |
 | D17 | Logo d'`elastic` **redirigé** par lien symbolique vers le logo Météo | même contournement à rejouer à chaque déploiement (bug de résolution d'`elastic` sur le template hérité `menu.html`) |
 | D18 | Aucun modèle de réponse préchargé | **réponses enregistrées préchargées** (bulletin, fiche d'observation) — mécanisme natif Roundcube, zéro développement |
+| D19 | Certificat **snakeoil** sur le simulateur de Portail (8444) | TLS Let's Encrypt terminé par le **Portail** (`POST /api/subdomains/:id/ssl`) |
+| D20 | `ipCible` du Portail simulé en `127.0.0.1` | à trancher à l'ouverture du SSH : IP **privée** (Portail sur le LAN) ou **publique** (Portail hors LAN) — un seul jeton à basculer dans `parametres-prod.env` |
+| D21 | `clamav-freshclam` **forcé au premier lancement** (signatures téléchargées à la main) | téléchargement automatique au démarrage + surveillance de l'expiration des signatures |
+| D22 | `rspamd` 2.7 : `scan_text_mime = false` mais les **pièces jointes texte sont quand même analysées** (mesuré) | comportement attendu identique en 3.x, mais **à re-mesurer** après le passage en 3.x (une option 3.x pourrait changer ce comportement) |
 
 ## Journal des sorties
 

@@ -22,3 +22,4 @@ config.inc.php
 # Artefacts d outils de navigation (Playwright) 
 # --------------------------------------------------------------------------- 
 .playwright-mcp/
+Temp/
