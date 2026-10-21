@@ -18,3 +18,7 @@ config.inc.php
 # ---------------------------------------------------------------------------
 !labo/web/postfixadmin-config.local.php
 !labo/web/roundcube-config.inc.php.labo
+# --------------------------------------------------------------------------- 
+# Artefacts d outils de navigation (Playwright) 
+# --------------------------------------------------------------------------- 
+.playwright-mcp/

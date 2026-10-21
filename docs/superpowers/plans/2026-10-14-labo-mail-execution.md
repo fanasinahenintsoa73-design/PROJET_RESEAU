@@ -27,6 +27,8 @@
 - [x] **8. Fail2ban** — 5 prisons actives. Filtre Roundcube = filtre **stock** `roundcube-auth.conf` (le maison est **impossible** : fail2ban prend `<9ind6fld>` pour un tag). Bannissement prouvé de bout en bout sur IP simulée 203.0.113.5 → règle iptables REJECT.
 - [x] **9. 5 comptes + validation bout-en-bout** — 5 comptes fictifs, chaîne complète prouvée 3 fois (SMTP direct, 587 authentifié, webmail).
 - [x] **10. Sauvegardes Restic** — dépôts local + déporté initialisés (2 clés distinctes), sauvegarde quotidienne OK, copie déportée OK, **test de restauration RÉUSSI** (critère n° 5).
+- [x] **11. Cœur** — open relay 4/4, signature DKIM opérationnelle, 34/34 revalidés.
+- [x] **12. Interface Roundcube « meteo »** — skin de surcouche (zéro PHP) : logo institutionnel, palette, tableau de bord d'accueil, gros boutons, page de connexion. **Zéro 404** à l'audit.
 
 ## Phase 10 — Sauvegardes (le volet qui manquait)
 
@@ -106,6 +108,48 @@ DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=meteo-test.lan;
 L'enregistrement DNS à publier est dans `/tmp/dkim-record.txt` :
 `dkim._domainkey IN TXT ("v=DKIM1; k=rsa; " "p=MIIBIjANBgkqhki…")` → à intégrer à la demande DNS de `meteomadagascar.mg` (Partie A, non encore rédigée).
 
+## Phase 12 — Interface Roundcube « meteo » (skin de surcouche, zéro PHP)
+
+**Fichiers versionnés :** `labo/skins/meteo/` (`meta.json`, `images/logo.png`, `images/logo.svg`, `styles/meteo.css`, `templates/includes/layout.html`, `templates/login.html`, `templates/mail.html`) · `labo/scripts/19-deploy-skin.sh`.
+
+**Décision structurante : zéro PHP.** Personne n'étant assuré de maintenir du code après le stage, le skin est une **surcouche du skin `elastic`** (héritage officiel via `meta.json` → `"extends": "elastic"`), sans une seule ligne de PHP ni de plugin. Un skin survit aux mises à jour de Roundcube ; un plugin PHP non maintenu casse à la première upgrade.
+
+**Contenu :** logo institutionnel (PNG officiel 187×77 → SVG autoportant data-URI), palette du Portail (`#1e3c72` / `#3077ba` / `#3498db`, liseré `#f2c200`), bandeau de tableau de bord en dégradé, **4 tuiles** (Rédiger / Boîte de réception / Contacts / Réglages) + 2 raccourcis (Modèles de rédaction → `?_task=settings&_action=responses`, Site officiel), page de connexion dégradée avec logo 240 px, mode sombre, mobile ≤ 480 px, styles d'impression.
+
+**Les « modèles de rédaction » ne coûtent aucun développement** : le mécanisme **natif** *Réponses enregistrées* de Roundcube (tâche `settings`, action `responses`) fait déjà le travail.
+
+### Trois pièges Roundcube 1.7.4 découverts à l'exécution (tous documentés dans le script)
+
+1. **La feuille de style d'`elastic` n'était plus servie (404) → interface déstylée.** `file_mod()` ne bascule sur la variante `.min.` que via `filemtime()` **dans le skin courant** ; le skin enfant n'ayant pas de `.min.css`, le repli ne se déclenchait plus. → **liens symboliques** `skins/meteo/styles/{styles,print,embed}.min.css` → `../../elastic/styles/…` (ils suivent les mises à jour d'`elastic`). Le lien doit être **relatif**.
+2. **Polices en 404.** La feuille d'`elastic` référence les polices en chemin relatif (`url(../fonts/…)`) → servies depuis `skins/meteo/styles/`, le navigateur les demande dans `skins/meteo/fonts/`. `static.php` **refuse un répertoire symlinké** (il fait `realpath()`) alors qu'il accepte un fichier symlinké → il faut **copier les 12 fichiers réels** d'`elastic`.
+3. **Le logo de l'écran d'accueil restait celui d'`elastic`** (la page de connexion montrait bien le Météo). La résolution du logo passe par `abs_url()` → `get_skin_file()` → `find_file_path()` et, sur le template *hérité* `menu.html`, aboutit à `skins/elastic/images/logo.svg` : la surcharge par fichier du skin enfant n'y est pas appliquée. → **lien symbolique** `skins/elastic/images/logo.svg` → `../../meteo/images/logo.svg` (original sauvegardé en `.orig`), recréé à chaque déploiement.
+
+> Autres conclusions : `find_file_path()` renvoie le **premier** skin trouvé (l'enfant gagne) ; `abs_url()` appelle `get_skin_file()` **sans** `$add_path` (différence avec `file_callback()`) ; `$_SESSION['skin_config']` ne contient que le `config` du skin **parent** → le `config` d'`elastic` est **recopié intégralement** dans `meta.json` ; `check_skin()` refuse un nom contenant `/` ou `\`.
+
+**Garde-fou du script 19** : il refuse de déployer `styles/styles.css` ou `styles/styles.min.css` dans le skin (ces fichiers **remplaceraient** la feuille complète d'`elastic`) et **audite en HTTP toutes les ressources citées** par la page — code de sortie = nombre d'échecs. C'est ce qui a détecté la régression n° 1.
+
+**Validation (Playwright, certificat auto-signé D1)** : page de connexion → logo Météo 207×91 + en-tête « Météo Madagascar / Messagerie institutionnelle — Direction Générale de la Météorologie » ; après connexion → **zéro 404**, logo Météo 78×36, tableau de bord 387×172 avec 4 tuiles, police `Roboto` (d'`elastic`) bien appliquée, interface en français.
+
+## Architecture cible en production — le Portail Météo
+
+**Découverte structurante (21 octobre) :** `mail.meteomadagascar.mg` est déjà servi par une **plateforme interne de gestion des sous-domaines** (« Portail Météo », SPA Vite, API `auth.meteomadagascar.mg`, backend Node/Express derrière nginx). Elle occupe **le port 443 de `41.207.49.27`** (elle y sert `adl.meteomadagascar.mg` avec un Let's Encrypt valide) et ne fait **pas** de DNS — elle ne crée que des **vhosts nginx** avec un champ `ipCible`.
+
+**Conséquences :**
+- Notre Apache **ne peut pas** prendre le 443 de l'IP publique.
+- Let's Encrypt **HTTP-01 est impossible** (port 80 déjà pris) et le **DNS-01 est impossible** (pas d'API sur la zone, zone DNS chez Stellarix) → **la seule voie praticable pour un certificat valide est la plateforme** (`POST /api/subdomains/:id/ssl`).
+- `mail.` reste le nom **SMTP/IMAP** (ports 25/587/993/4190 pointés en direct sur le serveur mail — le Portail n'y touche pas) ; **`webmail.`** est le nom **web**, en reverse-proxy.
+
+```
+Agent → https://webmail.meteomadagascar.mg
+      → nginx du Portail  (TLS Let's Encrypt terminé ici)
+      → proxy HTTP vers http://<serveur mail>:8080
+      → Apache / Roundcube → IMAP/SMTP → Dovecot + Postfix
+```
+
+**Le Portail devient une dépendance du *webmail*, pas de la *messagerie*** : si le Portail tombe, IMAP et SMTP continuent de fonctionner.
+
+**Cas de routage à trancher à l'ouverture du SSH** (un seul réglage à basculer) : si le Portail est sur le LAN → `ipCible` = IP **privée** du serveur mail ; sinon → IP **publique**. Le `dst-nat 443 → <IP_PRIVEE_MAIL>` du § 5.2 du document de conception est **faux** dans les deux cas : le 443 public est déjà tenu par le Portail.
+
 ## Résultat final — script `labo/scripts/12-validation-finale.sh`
 
 **34 PASS / 0 FAIL** — rejoué le 2026-10-15 à 19:07.
@@ -162,6 +206,10 @@ L'enregistrement DNS à publier est dans `/tmp/dkim-record.txt` :
 | D12 | `/var/lib/rspamd/dkim` absent (aucune signature émise) | présent dès le 1er envoi signé — **ne jamais l'exclure** |
 | D13 | Volume sauvegardé ≈ 866 Kio | 500 boîtes ≈ 1 To (RAID 1 : 2 To utiles) |
 | D14 | Signature DKIM **produite** mais **jamais vérifiée** (domaine `.lan`, pas d'enregistrement DNS) | `dkim._domainkey` en TXT à publier, puis `dkim=pass` côté destinataire |
+| D15 | Skin `meteo` servi **en direct** sur le vhost local (Apache termine le TLS) | **`webmail.`** derrière le nginx du Portail, TLS terminé par le Portail, Apache en **HTTP interne** (8080) |
+| D16 | Un seul enregistrement de peau en base (`$config['skin']`) | **purger la préférence `skin`** stockée par agent à l'import des 300-400 comptes, sinon un agent peut rester sur l'ancienne peau |
+| D17 | Logo d'`elastic` **redirigé** par lien symbolique vers le logo Météo | même contournement à rejouer à chaque déploiement (bug de résolution d'`elastic` sur le template hérité `menu.html`) |
+| D18 | Aucun modèle de réponse préchargé | **réponses enregistrées préchargées** (bulletin, fiche d'observation) — mécanisme natif Roundcube, zéro développement |
 
 ## Journal des sorties
 
@@ -170,6 +218,7 @@ L'enregistrement DNS à publier est dans `/tmp/dkim-record.txt` :
 - Phase 7 : login web tiana → redirect `?_task=mail` → vue boîte 41 Ko en français.
 - Phase 8 : `fail2ban-regex` 13 matched / 31 lignes ; test E2E 3 échecs → 1 IP bannie → iptables REJECT.
 - Phase 10 : `BACKUP_OK` · `COPIE_DEPORTEE_OK` (ID déporté différent) · `RESTAURATION VALIDEE` (3 msgs identiques, dates intactes).
+- Phase 12 : audit HTTP du script 19 → **zéro 404** ; tableau de bord 387×172, 4 tuiles ; logo Météo 207×91 (connexion) et 78×36 (accueil) ; police `Roboto` confirmée.
 
 ## Pièges rencontrés dans le volet sauvegarde
 
