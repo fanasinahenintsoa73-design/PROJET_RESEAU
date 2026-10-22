@@ -35,6 +35,7 @@
 - [x] **15. Rspamd 4.2.2 (dépôt officiel)** — migration 2.7 → 4.2.2, D9 fermée, la pile labo est désormais **identique** à la prod. 34/34 revalidés, ClamAV 4/4 revalidé, DKIM toujours signé.
 - [x] **16. Import à l'échelle + quotas par profil + politique de mots de passe** — 400 comptes importés (405 boîtes, 0 doublon, 0 erreur), quotas **pilotés par les données** (2/3/5 Go vérifiés par `doveadm quota get`), politique durcie (12 caractères + dictionnaire institutionnel) testée 12/12. Abandon mesuré du « changement de mot de passe à la 1re connexion ».
 - [x] **17. Refonte du skin selon le design du site réel + test de continuité** — identité visuelle du site `meteomadagascar.mg` (jaune `#F4C910` en action, teal `#17938A` en accent, Open Sans embarquée, boutons 8 px uppercase) ; 2 défauts de rendu corrigés ; **continuité sans MariaDB prouvée** (réception ET livraison maintenues, authentification en `temp_fail`).
+- [x] **18. Le webmail en page unique** — la tâche « mail » devient un **poste de travail en une page** (bandeau + 3 tuiles d'action + panneau latéral unique + liste des messages pleine largeur) ; **lecture en panneau superposé** (la liste reste visible, l'adresse de la page ne change pas) ; **rédaction en panneau superposé** (formulaire pré-rempli) ; **envoi réel validé de bout en bout** ; version téléphone (grille 2×2, panneau en tiroir). Toujours **zéro PHP** : un gabarit, une feuille de style et un script.
 
 ## Phase 10 — Sauvegardes (le volet qui manquait)
 
@@ -415,6 +416,81 @@ Conséquence assumée : le **bleu du Portail `#1E3C72` est abandonné** — la r
 
 > Le troisième est **le même piège** que celui rencontré sur `rspamadm configdump` en phase 14. Il est désormais une règle du projet : **ne jamais décider sur la seule foi d'un pipeline `grep -q`**.
 
+## Phase 18 — Le webmail en une seule page (poste de travail)
+
+**Pourquoi.** Le premier écran (la page « mail » de Roundcube, en trois colonnes) a été jugé
+« vraiment moche et difficile à utiliser pour le staff ». La cible n'est plus une boîte aux
+lettres relookée, mais **un poste de travail** : tout ce dont l'agent a besoin est à l'écran,
+et la lecture comme la rédaction se font **par-dessus** la liste, sans jamais quitter la page.
+
+**Décisions arrêtées** (grille de questions posée à l'utilisateur, 10 points) : 4 actions toujours
+visibles (Écrire un message, Boîte de réception, Envoyés, Recherche) · un **panneau latéral unique**
+(les 5 boîtes avec compteur, puis les 4 actions non-dossier : Contacts, Modèles de rédaction,
+Paramètres, Déconnexion) · **lecture et rédaction superposées** · identité visuelle du site
+institutionnel + un bloc « Autres services » (liens vers les services météo) en bas de page ·
+version téléphone allégée (grille 2×2, liste sans panneau de prévisualisation, rédaction plein
+écran, panneau latéral réduit à un bouton « ☰ »).
+
+**Toujours zéro PHP.** Un skin de surcouche peut faire tout cela : le moteur de Roundcube sait
+déjà produire la vue d'un message et le formulaire de rédaction en mode « cadre » (le paramètre
+natif `_framed=1`), il suffit à les afficher dans des cadres superposés.
+
+### 18.1 La page en une seule page
+
+`#layout` passe de `display:flex` (trois colonnes) à **`display:grid`** : `280px minmax(0,1fr)`
+en colonnes, `56px auto minmax(0,1fr)` en lignes, avec des zones nommées
+(`band` / `actions` / `side` / `list`). Le rail vertical d'`elastic` disparaît (`display:none`),
+les 5 boîtes réelles et leurs compteurs viennent du moteur (`mailboxlist`), le titre de la liste
+est rempli à partir du dossier sélectionné, et le champ de recherche est **déplacé** par le script
+selon la largeur (bandeau sur grand écran, 4e case de la grille 2×2 sur téléphone).
+
+### 18.2 Lecture : le clic ne doit pas quitter la page
+
+**Découverte mesurée** : dans Roundcube 1.7, cliquer un message **remplace la page entière**
+(`action-show`, le cadre de lecture disparaît du DOM) — il n'existe pas de panneau de
+prévisualisation à superposer. En revanche **l'identifiant du message est dans l'adresse du
+lien** (`&_uid=19`). Le script intercepte donc le clic **en phase de capture**, empêche la
+navigation, et affiche `…&_action=show&_framed=1` dans un cadre superposé. La barre de ce cadre
+porte le sujet et les actions **Répondre / Répondre à tous / Transférer / Imprimer / Fermer**,
+construites à partir de l'identifiant.
+
+### 18.3 Rédaction : l'obstacle des `X-Frame-Options`
+
+**Piège majeur, invisible à la lecture.** La page de composition refuse d'être affichée dans un
+cadre : Roundcube envoie `X-Frame-Options: deny` en dehors du mode cadre, pour des raisons de
+sécurité liées aux navigateurs ([#6688]). Et l'action « répondre » **n'existe pas côté serveur** :
+c'est le script client qui construit la demande à partir du message sélectionné.
+
+La séquence qui fonctionne, en trois temps :
+1. le script demande l'URL `?_task=mail&_action=compose&_mbox=…&_reply_uid=…&_framed=1` ;
+2. le serveur **crée un brouillon** et redirige vers `…&_action=compose&_id=<brouillon>` — la
+   redirection perd le drapeau `_framed`, et la page non cadre est refusée par le navigateur ;
+3. le script récupère cet identifiant dans l'adresse finale de sa requête, puis **recharge la
+   page du brouillon en mode cadre** (`&_id=…&_framed=1`) : plus de redirection, donc
+   `X-Frame-Options: sameorigin`, et le formulaire s'affiche.
+
+Les paramètres `_reply_uid`, `_forward_uid` et `_all` ont été relevés **dans le code source**
+(`program/actions/mail/compose.php`) : ce sont eux qui distinguent une réponse d'un transfert et
+le « répondre à tous ».
+
+### 18.4 Ce qui a été mesuré
+
+| Contrôle | Résultat |
+|---|---|
+| Mise en page | grille 280 px + 1160 px, bandeau 56 px, tuiles 59 px, **aucun débordement** du panneau latéral |
+| Lecture superposée | cadre ouvert, sujet affiché, **adresse de la page inchangée**, 0 erreur JavaScript |
+| Réponse | formulaire pré-rempli (destinataire, objet `Re: …`) dans le cadre de rédaction |
+| **Envoi réel** | message **reçu** par le destinataire (contrôlé en IMAP : `From`, `To`, `Subject`, `Date`) |
+| Téléphone (375 × 812) | 1 colonne, grille d'actions **2 × 2**, panneau latéral en tiroir, recherche déplacée |
+| Validation globale | **34 PASS / 0 FAIL** |
+
+### 18.5 Deux erreurs de syntaxe corrigées
+
+Le premier jet du gabarit réutilisait la classe `header-title` d'`elastic` pour le titre de la
+liste : cette classe est masquée (`display:none`) dans l'en-tête de la liste, le texte était
+donc bien écrit mais **invisible**. Le titre a son propre élément désormais. Et le panneau
+latéral débordait en bas (bloc « Autres services » coupé) : le conteneur a été rendu défilable.
+
 ## Résultat final — script `labo/scripts/12-validation-finale.sh`
 
 **34 PASS / 0 FAIL** — rejoué le 2026-10-21 après la phase 14 (ClamAV) et la phase 15 (Rspamd 4.2.2) : aucune régression, **8 services** `active` (postfix, dovecot, rspamd, apache2, mariadb, fail2ban, redis-server, clamav-daemon). Rejoué une dernière fois le **2026-10-22** après les phases 16 et 17 (import de 400 comptes + refonte du skin) : toujours **34 PASS / 0 FAIL**, le critère « nombre de comptes » étant désormais un minimum.
@@ -486,6 +562,7 @@ Conséquence assumée : le **bleu du Portail `#1E3C72` est abandonné** — la r
 | D27 | Politique de mots de passe durcie (12 caractères + dictionnaire institutionnel) ; **changement à la 1re connexion abandonné** (Roundcube 1.7.4 ne gère pas `pass_expired`) | **identique** — mot de passe provisoire **aléatoire et unique** par compte, remis individuellement |
 | D28 | Le quota **n'est pas appliqué** pendant une panne de MariaDB (il vient de l'annuaire) ; en revanche la **livraison** se poursuit (chemin de boîte dérivé de l'adresse) | idem — point de vigilance, sans conséquence sur la perte de données |
 | D29 | Identité visuelle du skin = **design du site `meteomadagascar.mg`** (jaune `#F4C910` en action, teal `#17938A` en accent, Open Sans embarquée localement) | **identique** — le logo est recadré par CSS (`object-fit: none`), le fichier officiel 187 × 77 reste intact |
+| D30 | La lecture et la rédaction sont affichées **par-dessus** la liste, dans des cadres superposés | **identique** — mais la vue en cadre est **obligatoire** : Roundcube envoie `X-Frame-Options: deny` hors du mode `_framed=1`. Le skin demande donc la création du brouillon puis recharge sa page en mode cadre. À reprendre tel quel en prod |
 
 ## Ce qui reste à demander à l'encadrant — checklist interne
 
@@ -601,3 +678,14 @@ print(max(snaps, key=lambda s: s["time"])["short_id"])')
 | Rail de navigation | emblème institutionnel recadré par CSS dans un cadre 46 × 46 (rail 78 px), dossier actif teal + filet gauche 3 px |
 | Tableau de bord | bandeau `#34495E` à titre blanc uppercase, 1 seule action jaune (« Rédiger »), 3 tuiles blanches à icône teal, 2 raccourcis pilules teal |
 | Continuité sans MariaDB | réception **acceptée** (`250 2.0.0 Ok: queued as 8C18A195A`) **et livrée** (`status=sent (delivered to maildir)`, 1,3 s) · authentification en `code=temp_fail` · `CONTINUITE_OK` |
+
+### Phase 18 — le webmail en page unique (22 octobre 2026)
+
+| Sortie | Valeur mesurée |
+|---|---|
+| Mise en page | grille `280px` + `1160px` · bandeau 56 px · rangée d'actions 59 px · **aucun débordement** du panneau latéral |
+| Lecture superposée | cadre ouvert sur `&_action=show&_framed=1` · sujet affiché · **adresse de la page inchangée** · 0 erreur JavaScript |
+| Réponse | formulaire pré-rempli dans le cadre de rédaction (destinataire `luc.ranaivo@meteo-test.lan`, objet `Re: [VALIDATION] bout-en-bout`) |
+| **Envoi réel** | message **reçu** par le destinataire (IMAP : `From: tiana.rakoto@…`, `To: luc.ranaivo@…`, `Date: Thu, 22 Oct 2026 15:40:30 +0300`) |
+| Téléphone (375 × 812) | 1 colonne · grille d'actions **2 × 2** (176 px × 2) · panneau latéral en tiroir (`translateX(-280)`) · recherche déplacée dans la grille |
+| Validation globale | **34 PASS / 0 FAIL** |

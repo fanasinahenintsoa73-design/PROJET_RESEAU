@@ -794,3 +794,606 @@ input[type="radio"]:checked {
 		display: none !important;
 	}
 }
+
+/* ==========================================================================
+   12. PAGE UNIQUE — poste de travail de la messagerie
+   --------------------------------------------------------------------------
+   La tache « mail » devient une page unique : bandeau + rangee d'actions +
+   panneau lateral + liste des messages en pleine largeur. La redaction et la
+   lecture se superposent, on ne quitte jamais la page.
+
+   Le selecteur est volontairement limite a la tache « mail » : la page de
+   redaction (compose.html) et les autres taches (contacts, parametres) ont
+   leur propre gabarit et leur propre mise en page. Sans cette restriction,
+   la page de redaction serait cassee.
+   ========================================================================== */
+
+/* --- grille de la page -------------------------------------------------- */
+
+body.task-mail:not(.action-compose) #layout {
+	display: grid;
+	grid-template-columns: 280px minmax(0, 1fr);
+	grid-template-rows: 56px auto minmax(0, 1fr);
+	grid-template-areas:
+		"band    band"
+		"actions actions"
+		"side    list";
+	height: 100%;
+	width: 100%;
+	overflow: hidden;
+}
+
+/* Le rail vertical d'elastic (78 px) laisse la place au panneau lateral.
+   Le DOM est conserve : aucune erreur JavaScript. */
+body.task-mail:not(.action-compose) #layout-menu {
+	display: none;
+}
+
+body.task-mail:not(.action-compose) #meteo-band {
+	grid-area: band;
+}
+
+body.task-mail:not(.action-compose) #meteo-actions {
+	grid-area: actions;
+}
+
+body.task-mail:not(.action-compose) #meteo-side {
+	grid-area: side;
+}
+
+body.task-mail:not(.action-compose) #layout-list {
+	grid-area: list;
+}
+
+/* La colonne de messages garde toute la largeur restante. On neutralise les
+   contraintes d'elastic (max-width: 30%, min-width: 300px) qui n'ont de
+   sens que dans une mise en page en colonnes. */
+body.task-mail:not(.action-compose) #layout-list {
+	flex: none;
+	max-width: none;
+	min-width: 0;
+	width: auto;
+	border-right: none;
+	background-color: var(--meteo-canvas);
+}
+
+/* --- bandeau ------------------------------------------------------------ */
+
+#meteo-band {
+	display: flex;
+	align-items: center;
+	gap: .75rem;
+	padding: 0 .9rem;
+	background-color: var(--meteo-surface);
+	border-bottom: 1px solid var(--meteo-hairline);
+	box-shadow: var(--meteo-shadow);
+	z-index: 20;
+}
+
+.meteo-band-brand {
+	display: flex;
+	align-items: center;
+	gap: .5rem;
+	min-width: 0;
+}
+
+/* L'embleme est le logo officiel recadre par le navigateur : le fichier
+   n'est pas modifie (meme technique que pour le rail d'elastic). */
+.meteo-band-logo {
+	width: 34px;
+	height: 34px;
+	object-fit: none;
+	object-position: left center;
+	flex: 0 0 auto;
+}
+
+.meteo-band-names {
+	display: flex;
+	flex-direction: column;
+	line-height: 1.2;
+	min-width: 0;
+}
+
+.meteo-band-title {
+	color: var(--meteo-ink);
+	font-weight: 700;
+	font-size: .92rem;
+	text-transform: uppercase;
+	letter-spacing: .03em;
+	white-space: nowrap;
+}
+
+.meteo-band-sub {
+	color: var(--meteo-muted);
+	font-size: .66rem;
+	white-space: nowrap;
+}
+
+.meteo-band-user {
+	margin-left: auto;
+	display: flex;
+	align-items: center;
+	gap: .5rem;
+	min-width: 0;
+}
+
+.meteo-band-user-name {
+	color: var(--meteo-body);
+	font-size: .76rem;
+	font-weight: 600;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 220px;
+}
+
+.meteo-side-toggle {
+	display: none;
+	align-items: center;
+	justify-content: center;
+	width: 40px;
+	height: 40px;
+	border-radius: var(--meteo-radius);
+	color: var(--meteo-ink);
+	font-size: 1.1rem;
+	text-decoration: none;
+}
+
+.meteo-side-toggle:hover {
+	background-color: var(--meteo-surface-alt);
+}
+
+/* Champ de recherche : large, toujours visible, dans le bandeau. */
+.meteo-search-slot {
+	flex: 1 1 auto;
+	max-width: 520px;
+	margin-left: auto;
+	min-width: 0;
+}
+
+.meteo-search-slot .searchbar {
+	display: flex;
+	align-items: center;
+	gap: .3rem;
+}
+
+.meteo-search-slot input[type="text"],
+.meteo-search-slot input[type="search"] {
+	width: 100%;
+	height: 38px;
+	padding: 8px 12px;
+	font-size: .8rem;
+	color: var(--meteo-ink);
+	background-color: var(--meteo-surface);
+	border: 1px solid var(--meteo-field);
+	border-radius: 6px;
+}
+
+.meteo-search-slot input:focus {
+	outline: none;
+	border-color: var(--meteo-teal);
+	box-shadow: 0 0 0 2px rgba(23, 147, 138, .15);
+}
+
+.meteo-search-mobile {
+	display: none;
+}
+
+/* --- rangee d'actions --------------------------------------------------- */
+
+#meteo-actions {
+	display: flex;
+	gap: .5rem;
+	padding: .6rem .9rem;
+	background-color: var(--meteo-canvas);
+	border-bottom: 1px solid var(--meteo-hairline);
+}
+
+#meteo-actions .meteo-tile {
+	flex: 1 1 0;
+	max-width: 320px;
+	padding: .7rem .85rem;
+	font-size: .85rem;
+}
+
+#meteo-actions .meteo-tile svg {
+	width: 1.5rem;
+	height: 1.5rem;
+}
+
+.meteo-tile-count {
+	margin-left: auto;
+	padding: 0 .45rem;
+	background-color: var(--meteo-teal);
+	color: #fff;
+	border-radius: 999px;
+	font-size: .68rem;
+	font-weight: 700;
+	line-height: 1.5;
+}
+
+/* --- panneau lateral ---------------------------------------------------- */
+
+#meteo-side {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	background-color: var(--meteo-surface);
+	border-right: 1px solid var(--meteo-hairline);
+	overflow: hidden;
+}
+
+.meteo-side-scroll {
+	overflow-y: auto;
+	height: 100%;
+	padding: .7rem .8rem 1.4rem;
+}
+
+.meteo-side-title {
+	margin: 1rem .2rem .4rem;
+	color: var(--meteo-muted);
+	font-size: .66rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: .09em;
+}
+
+.meteo-side-scroll > .meteo-side-title:first-child {
+	margin-top: 0;
+}
+
+/* Les cinq boites : ce sont les vrais dossiers du moteur, avec leurs
+   compteurs de non-lus. */
+#meteo-folders ul {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+#meteo-folders li > a {
+	display: flex;
+	align-items: center;
+	gap: .45rem;
+	padding: .45rem .55rem;
+	border-radius: 6px;
+	color: var(--meteo-body);
+	font-size: .84rem;
+	text-decoration: none;
+}
+
+#meteo-folders li > a:hover {
+	background-color: var(--meteo-surface-alt);
+	color: var(--meteo-ink);
+}
+
+#meteo-folders li.selected > a {
+	background-color: rgba(23, 147, 138, .09);
+	color: var(--meteo-teal);
+	font-weight: 600;
+	box-shadow: inset 3px 0 0 var(--meteo-teal);
+}
+
+#meteo-folders .unreadcount {
+	margin-left: auto;
+	padding: 0 .4rem;
+	background-color: var(--meteo-teal);
+	color: #fff;
+	border-radius: 999px;
+	font-size: .68rem;
+	font-weight: 700;
+	line-height: 1.5;
+}
+
+.meteo-side-actions,
+.meteo-side-services {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.meteo-side-actions a,
+.meteo-side-services a {
+	display: flex;
+	align-items: center;
+	gap: .45rem;
+	padding: .45rem .55rem;
+	border-radius: 6px;
+	color: var(--meteo-body);
+	font-size: .84rem;
+	text-decoration: none;
+}
+
+.meteo-side-actions a:hover,
+.meteo-side-services a:hover {
+	background-color: var(--meteo-surface-alt);
+	color: var(--meteo-ink);
+}
+
+.meteo-side-actions svg {
+	width: 1.05rem;
+	height: 1.05rem;
+	flex: 0 0 auto;
+	fill: none;
+	stroke: var(--meteo-teal);
+	stroke-width: 1.7;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+.meteo-side-services a {
+	color: var(--meteo-teal);
+	font-size: .78rem;
+	font-weight: 600;
+}
+
+.meteo-side-services a::after {
+	content: "\2197";
+	margin-left: auto;
+	color: var(--meteo-muted);
+	font-size: .72rem;
+}
+
+.quota-widget {
+	margin: 1rem .2rem 0;
+	padding: .5rem .6rem;
+	background-color: var(--meteo-surface-alt);
+	border-radius: var(--meteo-radius);
+	color: var(--meteo-body);
+	font-size: .72rem;
+}
+
+/* --- liste des messages ------------------------------------------------- */
+
+body.task-mail:not(.action-compose) #messagelist-header {
+	background-color: var(--meteo-surface);
+	border-bottom: 1px solid var(--meteo-hairline);
+}
+
+.meteo-list-title {
+	display: block;
+	flex: 0 1 auto;
+	min-width: 0;
+	margin-right: auto;
+	color: var(--meteo-ink);
+	font-size: .92rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: .02em;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+body.task-mail:not(.action-compose) #messagelist-content {
+	background-color: var(--meteo-surface);
+}
+
+/* --- boutons du skin ---------------------------------------------------- */
+
+.meteo-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 32px;
+	padding: 0 .85rem;
+	border: 1px solid transparent;
+	border-radius: var(--meteo-radius);
+	background: none;
+	color: var(--meteo-body);
+	font-family: inherit;
+	font-size: .72rem;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: .02em;
+	cursor: pointer;
+}
+
+.meteo-btn-ghost {
+	background-color: var(--meteo-surface);
+	border-color: var(--meteo-field);
+}
+
+.meteo-btn-ghost:hover {
+	color: var(--meteo-ink);
+	border-color: var(--meteo-teal);
+}
+
+/* --- lecture : panneau superpose -------------------------------------- */
+
+/* Le cadre de lecture d'elastic n'est plus utilise : Roundcube 1.7
+   remplace la page entiere a l'ouverture d'un message. On le laisse en
+   place mais invisible, et on pose notre propre panneau par-dessus. */
+body.task-mail:not(.action-compose) #layout-content {
+	position: fixed;
+	inset: 0;
+	z-index: 60;
+	background-color: var(--meteo-canvas);
+	visibility: hidden;
+	opacity: 0;
+	pointer-events: none;
+}
+
+body.task-mail:not(.action-compose) #layout-content .header {
+	background-color: var(--meteo-surface);
+	border-bottom: 1px solid var(--meteo-hairline);
+}
+
+#meteo-close-read {
+	margin-left: .5rem;
+}
+
+.meteo-read-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 70;
+	display: flex;
+	flex-direction: column;
+	background-color: var(--meteo-canvas);
+}
+
+.meteo-read-overlay[hidden] {
+	display: none;
+}
+
+.meteo-read-bar {
+	display: flex;
+	align-items: center;
+	gap: .6rem;
+	padding: .5rem .9rem;
+	background-color: var(--meteo-navy);
+	color: #fff;
+}
+
+.meteo-read-title {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	font-size: .85rem;
+	font-weight: 600;
+}
+
+.meteo-read-actions {
+	display: flex;
+	gap: .35rem;
+}
+
+.meteo-read-bar .meteo-btn {
+	background-color: transparent;
+	border-color: rgba(255, 255, 255, .45);
+	color: #fff;
+}
+
+.meteo-read-bar .meteo-btn:hover {
+	background-color: rgba(255, 255, 255, .12);
+	border-color: #fff;
+	color: #fff;
+}
+
+.meteo-read-frame {
+	flex: 1 1 auto;
+	width: 100%;
+	border: 0;
+	background-color: #fff;
+}
+
+/* --- redaction : panneau superpose -------------------------------------- */
+
+.meteo-compose-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 80;
+	display: flex;
+	flex-direction: column;
+	background-color: rgba(51, 51, 51, .45);
+}
+
+.meteo-compose-overlay[hidden] {
+	display: none;
+}
+
+.meteo-compose-bar {
+	display: flex;
+	align-items: center;
+	gap: .6rem;
+	padding: .5rem .9rem;
+	background-color: var(--meteo-navy);
+	color: #fff;
+}
+
+.meteo-compose-title {
+	font-size: .78rem;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: .05em;
+}
+
+.meteo-compose-bar .meteo-btn {
+	margin-left: auto;
+	background-color: transparent;
+	border-color: rgba(255, 255, 255, .45);
+	color: #fff;
+}
+
+.meteo-compose-bar .meteo-btn:hover {
+	background-color: rgba(255, 255, 255, .12);
+	border-color: #fff;
+	color: #fff;
+}
+
+.meteo-compose-frame {
+	flex: 1 1 auto;
+	width: 100%;
+	border: 0;
+	background-color: #fff;
+}
+
+/* --- telephone : panneau en tiroir, grille 2x2 --------------------------- */
+
+@media screen and (max-width: 767.98px) {
+	body.task-mail:not(.action-compose) #layout {
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-areas:
+			"band"
+			"actions"
+			"list";
+	}
+
+	body.task-mail:not(.action-compose) #meteo-side {
+		position: fixed;
+		top: 0;
+		left: 0;
+		bottom: 0;
+		width: 280px;
+		max-width: 84vw;
+		z-index: 70;
+		transform: translateX(-100%);
+		transition: transform .18s ease-in-out;
+		box-shadow: var(--meteo-shadow-lg);
+	}
+
+	body.task-mail:not(.action-compose).meteo-side-open #meteo-side {
+		transform: translateX(0);
+	}
+
+	.meteo-side-toggle {
+		display: inline-flex;
+	}
+
+	.meteo-band-sub,
+	.meteo-band-user-name {
+		display: none;
+	}
+
+	.meteo-band-title {
+		font-size: .8rem;
+	}
+
+	/* Grille 2x2 : trois actions + le champ de recherche. */
+	body.task-mail:not(.action-compose) #meteo-actions {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: .4rem;
+		padding: .5rem .6rem;
+	}
+
+	body.task-mail:not(.action-compose) #meteo-actions .meteo-tile {
+		max-width: none;
+		min-height: 44px;
+	}
+
+	.meteo-search-mobile {
+		display: block;
+		min-width: 0;
+	}
+
+	.meteo-search-slot {
+		max-width: none;
+		margin-left: 0;
+	}
+
+	.meteo-compose-overlay {
+		background-color: #fff;
+	}
+}

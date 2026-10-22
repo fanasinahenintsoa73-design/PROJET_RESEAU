@@ -181,6 +181,7 @@ check() {
 check "meteo.css"          "feuille meteo.css referencee"
 check "skins/meteo/"        "ressources servies depuis skins/meteo"
 check "logo.svg"            "logo reference"
+check "meteo.js"            "script meteo.js reference"
 
 # Repercussion : toutes les ressources citees par la page doivent repondre 200.
 # C'est le garde-fou contre la regression "feuille elastic non servie".
@@ -196,6 +197,23 @@ for ref in ${REFS}; do
     fi
     CHECKS=$((CHECKS + 1))
 done
+
+# Le script du skin (page unique : overlays, menus, compteurs) est charge
+# par layout.html. S'il n'est pas servi, la page reste affichee mais elle
+# n'est plus "une seule page" : le controle est donc explicite.
+echo "    -- audit du script du skin --"
+if [ ! -f "${SKIN_DIR}/meteo.js" ]; then
+    echo "    [FAIL] meteo.js absent du skin deploye"
+    FAILS=$((FAILS + 1))
+fi
+code=$(curl -sk -o /dev/null -w '%{http_code}' "https://webmail.meteo-test.lan/static.php/skins/meteo/meteo.js")
+if [ "${code}" = "200" ]; then
+    echo "    [PASS] 200  static.php/skins/meteo/meteo.js"
+else
+    echo "    [FAIL] ${code}  static.php/skins/meteo/meteo.js"
+    FAILS=$((FAILS + 1))
+fi
+CHECKS=$((CHECKS + 1))
 
 # Les @font-face sont declares DANS meteo.css : l'audit du HTML ne les voit
 # pas. Une police non servie = retour silencieux a Roboto, c'est-a-dire un

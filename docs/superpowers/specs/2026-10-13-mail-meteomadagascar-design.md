@@ -191,6 +191,47 @@ Roundcube 1.7.4) :
 LAN → « IP cible » = IP **privée** du serveur mail ; sinon → IP **publique**. Le `dst-nat 443`
 du § 5.2 est **à supprimer** dans les deux cas.
 
+### 4.5 Le webmail en une seule page (poste de travail)
+
+L'interface de Roundcube, telle qu'elle est livrée, a été jugée « vraiment moche et difficile à
+utiliser pour le staff » : c'est un client de messagerie à trois colonnes, pensé pour un
+utilisateur qui connaît déjà son Courriel. L'usage visé est celui d'un **poste de travail** :
+une seule page où l'on voit en permanence **ce qu'on peut faire** (écrire, boîte de réception,
+envoyés, recherche) et **où l'on se trouve** (un panneau latéral unique), et où la lecture d'un
+message ou la rédaction d'une réponse **se superposent à la liste** au lieu de remplacer la page.
+
+La refonte est faite **sans une ligne de PHP** : c'est un *skin* (surcouche d'`elastic`) et un
+fichier JavaScript, deux fichiers de plus, qui n'ajoutent aucune surface d'attaque et survivent
+aux mises à jour de Roundcube.
+
+| Élément de l'écran | Contenu |
+|---|---|
+| Bandeau | emblème institutionnel, nom du service, **champ de recherche toujours visible**, utilisateur, bouton de menu (téléphone) |
+| Rangée d'actions | 3 tuiles : **Écrire un message** (la seule action jaune, donc la seule prioritaire), **Boîte de réception** (avec le compteur de non-lus), **Envoyés** |
+| Panneau latéral unique | les **5 boîtes réelles** du moteur, avec leurs compteurs, puis les 4 actions qui ne sont pas des boîtes : Contacts, Modèles de rédaction, Paramètres, Déconnexion ; puis un bloc « Autres services » (liens vers les pages météo du site institutionnel) et l'espace utilisé |
+| Zone centrale | la **liste des messages en pleine largeur**, avec le nom du dossier affiché en titre |
+| Lecture | un **panneau superposé** plein écran : sujet, Répondre, Répondre à tous, Transférer, Imprimer, Fermer — la liste reste visible en dessous, l'adresse de la page ne change pas |
+| Rédaction | un **panneau superposé** : destinataire, sujet, corps, pièces jointes — la liste reste visible en dessous |
+| Téléphone (≤ 767 px) | grille d'actions en **2 × 2**, panneau latéral en tiroir, lecture et rédaction en plein écran, pas de panneau de prévisualisation |
+
+**Identité visuelle** : celle du site `www.meteomadagascar.mg` (couleurs et règles relevées dans la
+feuille de style du thème : Open Sans, jaune `#F4C910` pour les actions, teal `#17938A` pour les
+accents et les états actifs, bandeau `#34495E`), police **embarquée localement** — aucun appel à
+un CDN externe.
+
+**Deux contraintes techniques à connaître (mesurées en laboratoire, 22 octobre 2026)** :
+
+1. **La vue en cadre est obligatoire.** Roundcube n'envoie `X-Frame-Options: sameorigin` que
+   lorsqu'une page est demandée en mode cadre (`&_framed=1`) ; sinon il envoie `deny` et le
+   navigateur refuse de l'afficher dans un cadre. Un message affiché par-dessus la liste doit
+   donc être demandé en mode cadre.
+2. **L'action « répondre » n'existe pas côté serveur** : c'est le script du navigateur qui la
+   construit. Le serveur accepte en revanche, dans l'action de composition, une référence
+   (`_reply_uid`, `_forward_uid`, `_all`) ; il crée alors un brouillon et redirige vers sa page
+   — en perdant le drapeau de cadre. La séquence qui fonctionne, et qui est celle retenue par le
+   skin, est donc en trois temps : demander la composition avec la référence, **récupérer
+   l'identifiant du brouillon dans l'adresse d'arrivée**, puis recharger sa page en mode cadre.
+
 ---
 
 ## 5. Conception réseau MikroTik
@@ -874,6 +915,7 @@ raisonnement reste visible.
 | 8.7 | import des comptes, mots de passe provisoires | mots de passe provisoires **aléatoires et uniques** (20 caractères) remis un par un ; politique de validation **durcie** dans PostfixAdmin : 12 caractères minimum, 3 lettres, 2 chiffres, refus des mots de passe courants et institutionnels (12/12 aux tests) |
 | 2.1 / 10 | « Postfix ne touche jamais MariaDB : si la base tombe, il continue de livrer » | **mesuré en laboratoire** : la promesse est tenue — le message est **accepté et livré** pendant la panne, car le chemin de la boîte est dérivé de l'adresse et non d'une lecture SQL. Deux limites honnêtes sont en revanche à connaître : l'authentification échoue en **erreur temporaire** (les agents ne peuvent plus se connecter) et le **quota n'est pas appliqué** tant que l'annuaire est indisponible |
 | 4.4 | (inexistant) | l'identité visuelle du webmail reprend celle du **site `www.meteomadagascar.mg`** : couleurs et règles de style relevées dans la feuille du thème (Open Sans, jaune `#F4C910` pour les actions, teal `#17938A` pour les accents et les états actifs, bandeau `#34495E`, boutons en majuscules grasses à rayon 8 px). La police est **embarquée localement** : aucun appel à un CDN externe |
+| 4.5 | (inexistant) | le webmail est un **poste de travail en une seule page** : bandeau (recherche toujours visible), rangée d'actions, panneau latéral unique (les 5 boîtes à compteur + les 4 actions qui ne sont pas des boîtes + les liens vers les services météo), liste des messages en pleine largeur ; la **lecture** et la **rédaction** se superposent à la liste au lieu de remplacer la page. Réalisé **sans PHP** (skin + un fichier JavaScript). Deux contraintes mesurées : la vue en cadre est obligatoire (`X-Frame-Options: deny` hors mode `_framed=1`) et l'action « répondre » n'existe pas côté serveur (c'est le script du navigateur qui la construit) |
 
 **La leçon à retenir** : les hypothèses de conception fondées sur une infrastructure décrite de
 seconde main (« les ports sont libres ») ont été fausses, et une seule d'entre elles — le 443
