@@ -595,11 +595,41 @@ des accès : IMAP (993), soumission (587) et webmail.
 |---|---|---|
 | Algorithme | Argon2id, ou bcrypt si indisponible | MD5 est cassable en quelques secondes |
 | Longueur | 12 caractères minimum | la longueur compte plus que la complexité |
-| Première connexion | changement imposé | permet une création en masse avec mot de passe provisoire |
+| Mot de passe provisoire | **aléatoire et unique par compte**, remis individuellement | voir la correction ci-dessous |
 | Limitation | anti-bruteforce sur webmail et IMAP | une liste de mots de passe courants est bloquée |
 
 Les règles du type « 1 caractère spécial, 1 chiffre » produisent `Meteo2024!` que tout le monde
 devine. 12 caractères de mots normaux sont plus sûrs et moins pénibles.
+
+**Correction — le changement de mot de passe imposé à la première connexion est abandonné
+(mesuré en laboratoire, 21 octobre 2026).** La première version de ce document imposait le
+changement à la première connexion. Le mécanisme existe côté Dovecot (`password_expiry` dans la
+userdb, code d'authentification `pass_expired`), mais **Roundcube 1.7.4 ne le gère pas** : la
+recherche de « expired » dans `program/lib/Roundcube/rcube_imap.php` et dans les étapes `mail/` et
+`settings/` ne renvoie rien. Conséquence : un agent connecté par IMAP (Thunderbird, Outlook)
+verrait la demande de changement, mais **un agent connecté par le webmail — le canal principal,
+puisque le webmail est servi par le Portail — verrait un échec de connexion** et ne pourrait
+jamais changer son mot de passe. Verrouiller 300 agents pour leur demander de changer de mot de
+passe est un risque inacceptable.
+
+Le contrôle équivalent, et plus sûr, est le suivant : **chaque compte reçoit un mot de passe
+provisoire aléatoire de 20 caractères, unique, remis individuellement** (jamais un mot de passe
+commun à tous les comptes). Il n'y a rien à deviner, rien à réemployer, et la liste des mots de
+passe courants est bloquée à la création. Un mot de passe provisoire partagé par 500 comptes
+serait devinable par le premier agent qui le teste.
+
+**Politique appliquée dans PostfixAdmin** (défaillance corrigée : le défaut du produit est de
+5 caractères minimum, sans liste de mots de passe courants — ce qui est très en dessous de ce que
+ce document exige) :
+
+- 12 caractères minimum ;
+- 3 lettres et 2 chiffres minimum ;
+- mots de passe courants **et mots liés à l'institution** bloqués (`meteo`, `madagascar`,
+  `tana`, `bulletin`, `observation`…) ;
+- mot de passe entièrement répétitif refusé.
+
+Ces règles sont vérifiées par un test unitaire (`labo/scripts/test-password-policy.php`, 12 cas)
+qui appelle la fonction réelle de PostfixAdmin, et non une réimplémentation de la règle.
 
 **Protection de la console d'administration :** accès réservé au réseau interne **et** mot de passe
 d'administration. Le 2FA n'existe pas nativement dans PostfixAdmin et nécessiterait un composant
@@ -624,6 +654,27 @@ Le quota est appliqué par **Dovecot**, pas par Postfix. Un agent qui le dépass
 et sa boîte en débordement est conservée 5 jours le temps qu'il trie. Personne ne perd de
 courrier.
 
+**Mise en œuvre mesurée (21 octobre 2026).** Le quota n'est pas une règle unique écrite en dur
+dans `dovecot.conf` : il est **piloté par les données**, ce qui permet de distinguer les profils
+sans toucher à la configuration. PostfixAdmin porte la valeur dans la colonne `quota` de la
+table `mailbox` (l'unité de l'interface est le **Mo**, la colonne stocke des octets) et Dovecot
+la lit à travers la userdb SQL.
+
+Le point technique à connaître : dans Dovecot 2.3, la surcharge par utilisateur ne passe **pas**
+par un champ `quota` (Dovecot l'interprète comme une définition de backend et échoue avec
+« Unknown quota backend »), ni par un champ nommé d'après la racine de quota. Elle passe par le
+champ **`quota_rule`**, lu par `quota_root_add_rules()` dans le source du plugin. La requête
+applique donc :
+
+```
+CASE WHEN quota IS NULL OR quota <= 0 THEN '*:storage=2048M'
+     ELSE CONCAT('*:storage=', ROUND(quota/1024000), 'M') END AS quota_rule
+```
+
+Le `ROUND` est obligatoire : sans lui Dovecot interprète `5120.0000M` et refuse la valeur.
+Limites mesurées après mise en œuvre : 2 Go → 2 097 152 Ko, 3 Go → 3 145 728 Ko, 5 Go →
+5 242 880 Ko, chacune sur la bonne boîte.
+
 ### 8.7 Création des 500 comptes
 
 Créer 500 comptes un par un prend des jours. La méthode :
@@ -632,7 +683,7 @@ Créer 500 comptes un par un prend des jours. La méthode :
 2. **Génération des adresses en masse** : minuscules, sans accents, apostrophes supprimées,
    collision → suffixe numérique.
 3. **Import en une passe**, chaque ligne portant adresse, nom complet et quota.
-4. **Mots de passe provisoires**, changement imposé à la première connexion.
+4. **Mots de passe provisoires aléatoires et uniques**, remis individuellement (voir 8.5).
 5. **Vérification** : comparer le nombre d'importés au nombre attendu et vérifier 5 comptes au hasard.
 
 **Point d'honnêteté :** une adresse générée automatiquement ne doit jamais être publiée sans
@@ -802,7 +853,7 @@ que les pièces jointes Excel ne s'ouvrent pas.
 ## 14. Journal des corrections de ce document
 
 Ce document a été écrit **avant** toute vérification sur le terrain. Les paragraphes ci-dessous
-ont été **corrigés** le 21 octobre 2026, après constat sur l'infrastructure existante et
+ont été **corrigés** les 21 et 22 octobre 2026, après constat sur l'infrastructure existante et
 validation en laboratoire. Ils sont conservés en place (et non réécrits) pour que la trace du
 raisonnement reste visible.
 
@@ -818,6 +869,11 @@ raisonnement reste visible.
 | 7.4 | ClamAV prévu | **validé en labo** : 4/4 au test EICAR, le corps n'est jamais scanné |
 | 7.4 | (version de Rspamd non précisée) | **Rspamd 4.2.2 depuis le dépôt officiel** (les paquets de la distribution fournissent 2.7, non supporté) — la pile du labo est désormais identique à celle de la production |
 | 11 | Partie A = PTR, DNS, MikroTik, matériel | **+ A5** (sous-domaine et certificat via le Portail) et **+ A6** (enregistrement DKIM) |
+| 8.5 | « changement de mot de passe imposé à la première connexion » | **abandonné, sur mesure** : Roundcube 1.7.4 ne gère pas la réponse « mot de passe expiré », donc un agent en webmail (canal principal) verrait un **échec de connexion** au lieu de la demande de changement — risque de verrouiller 300 agents. Le contrôle équivalent est un mot de passe provisoire **aléatoire et unique par compte**, remis **individuellement** (un mot de passe partagé par 500 comptes serait devinable par le premier agent qui le teste) |
+| 8.6 | « le quota est appliqué par Dovecot » (mécanisme non détaillé) | quota **piloté par les données** : PostfixAdmin porte la valeur, Dovecot la lit dans le champ userdb **`quota_rule`** (et ni `quota`, que Dovecot interpréterait comme un *backend*, ni un champ nommé d'après la racine) — 2 Go agent, 3 Go station, 5 Go cadre, valeurs mesurées en laboratoire |
+| 8.7 | import des comptes, mots de passe provisoires | mots de passe provisoires **aléatoires et uniques** (20 caractères) remis un par un ; politique de validation **durcie** dans PostfixAdmin : 12 caractères minimum, 3 lettres, 2 chiffres, refus des mots de passe courants et institutionnels (12/12 aux tests) |
+| 2.1 / 10 | « Postfix ne touche jamais MariaDB : si la base tombe, il continue de livrer » | **mesuré en laboratoire** : la promesse est tenue — le message est **accepté et livré** pendant la panne, car le chemin de la boîte est dérivé de l'adresse et non d'une lecture SQL. Deux limites honnêtes sont en revanche à connaître : l'authentification échoue en **erreur temporaire** (les agents ne peuvent plus se connecter) et le **quota n'est pas appliqué** tant que l'annuaire est indisponible |
+| 4.4 | (inexistant) | l'identité visuelle du webmail reprend celle du **site `www.meteomadagascar.mg`** : couleurs et règles de style relevées dans la feuille du thème (Open Sans, jaune `#F4C910` pour les actions, teal `#17938A` pour les accents et les états actifs, bandeau `#34495E`, boutons en majuscules grasses à rayon 8 px). La police est **embarquée localement** : aucun appel à un CDN externe |
 
 **La leçon à retenir** : les hypothèses de conception fondées sur une infrastructure décrite de
 seconde main (« les ports sont libres ») ont été fausses, et une seule d'entre elles — le 443
@@ -826,5 +882,6 @@ vérifiée avant d'en dépendre**, a fortiori quand elle est au centre d'un plan
 
 **Où est la suite ?** Le carnet d'exécution `docs/superpowers/plans/2026-10-14-labo-mail-execution.md`
 contient l'état réel du laboratoire (34/34 aux critères de validation, sauvegarde et restauration
-validées, open relay 4/4, DKIM signé, antivirus opérationnel), le tableau des divergences
-labo/production (D1 à D24) et la checklist de ce qui reste à demander à l'encadrant.
+validées, open relay 4/4, DKIM signé, antivirus opérationnel, import de 400 comptes vérifié,
+continuité de livraison sans base de données vérifiée), le tableau des divergences
+labo/production (D1 à D29) et la checklist de ce qui reste à demander à l'encadrant.

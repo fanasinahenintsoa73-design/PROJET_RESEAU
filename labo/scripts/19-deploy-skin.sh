@@ -85,16 +85,27 @@ done
 # (url(../fonts/...)) ; servie depuis skins/meteo/styles/, le navigateur les
 # demande dans skins/meteo/fonts/. static.php refuse de servir un repertoire
 # symlinke -> on copie les fichiers reels d'elastic.
-echo "[..] copie des polices depuis elastic"
-sudo rm -rf "${SKIN_DIR}/fonts"
+#
+# Le skin meteo embarque en plus sa propre police (Open Sans, woff2) : elle a
+# deja ete copiee a l'etape 2 (cp -a de SRC_DIR). On ne doit donc PAS
+# supprimer le repertoire fonts ici, et on copie avec -n (no clobber) pour
+# ne pas ecraser Open Sans avec les fontes d'elastic.
+echo "[..] copie des polices (Roboto depuis elastic, Open Sans depuis le skin)"
 sudo mkdir -p "${SKIN_DIR}/fonts"
 if [ -d "${RC_ROOT}/skins/elastic/fonts" ]; then
-    sudo cp -a "${RC_ROOT}/skins/elastic/fonts/." "${SKIN_DIR}/fonts/"
-    sudo chown -R www-data:www-data "${SKIN_DIR}/fonts"
-    echo "    $(ls -1 "${SKIN_DIR}/fonts" | wc -l) fichiers de police copies"
+    sudo cp -an "${RC_ROOT}/skins/elastic/fonts/." "${SKIN_DIR}/fonts/"
+    echo "    Roboto : $(ls -1 "${RC_ROOT}/skins/elastic/fonts" | wc -l) fichiers"
 else
     echo "    [AVERTISSEMENT] skins/elastic/fonts introuvable"
 fi
+if [ -d "${SRC_DIR}/fonts" ]; then
+    sudo cp -an "${SRC_DIR}/fonts/." "${SKIN_DIR}/fonts/"
+    echo "    Open Sans : $(ls -1 "${SRC_DIR}/fonts" | wc -l) fichiers"
+else
+    echo "    [AVERTISSEMENT] aucune police propre au skin dans ${SRC_DIR}/fonts"
+fi
+sudo chown -R www-data:www-data "${SKIN_DIR}/fonts"
+sudo find "${SKIN_DIR}/fonts" -type f -exec chmod 644 {} \;
 
 # Logo : sur l'ecran d'accueil (tache mail), Roundcube resout le logo vers
 # skins/elastic/images/logo.svg (la surcharge par fichier du skin enfant n'est
@@ -145,7 +156,13 @@ sudo chown www-data:www-data "${RC_ROOT}/temp"
 
 # ---------------------------------------------------------------- 5. verification
 echo "[..] verification HTTP"
-HTTP_CODE=$(curl -sk -o /tmp/meteo-login.html -w '%{http_code}' https://webmail.meteo-test.lan/)
+# Capture dans un fichier NEUF : sur ce poste, un processus root issue de
+# sudo ne peut pas rouvrir un fichier deja detenu par l'utilisateur de
+# session (EACCES), meme avec toutes les capabilities. Un fichier cree par
+# mktemp (proprietaire root) evite le piege.
+TMP_HTML=$(sudo mktemp /tmp/meteo-login.XXXXXX.html)
+trap 'sudo rm -f "${TMP_HTML}"' EXIT
+HTTP_CODE=$(sudo curl -sk -o "${TMP_HTML}" -w '%{http_code}' https://webmail.meteo-test.lan/)
 echo "    page de connexion -> HTTP ${HTTP_CODE}"
 
 CHECKS=0
@@ -153,7 +170,7 @@ FAILS=0
 
 check() {
     CHECKS=$((CHECKS + 1))
-    if grep -q "$1" /tmp/meteo-login.html; then
+    if sudo grep -q "$1" "${TMP_HTML}"; then
         echo "    [PASS] $2"
     else
         echo "    [FAIL] $2"
@@ -168,13 +185,33 @@ check "logo.svg"            "logo reference"
 # Repercussion : toutes les ressources citees par la page doivent repondre 200.
 # C'est le garde-fou contre la regression "feuille elastic non servie".
 echo "    -- audit des ressources citees --"
-REFS=$(grep -oE '(href|src)="[^"]+"' /tmp/meteo-login.html | sed -E 's/.*="([^"]+)"/\1/' | grep -vE '^(#|data:|javascript:)' | sort -u)
+REFS=$(sudo grep -oE '(href|src)="[^"]+"' "${TMP_HTML}" | sed -E 's/.*="([^"]+)"/\1/' | grep -vE '^(#|data:|javascript:)' | sort -u)
 for ref in ${REFS}; do
     code=$(curl -sk -o /dev/null -w '%{http_code}' "https://webmail.meteo-test.lan/${ref}")
     if [ "${code}" = "200" ]; then
         echo "    [PASS] 200  ${ref}"
     else
         echo "    [FAIL] ${code}  ${ref}"
+        FAILS=$((FAILS + 1))
+    fi
+    CHECKS=$((CHECKS + 1))
+done
+
+# Les @font-face sont declares DANS meteo.css : l'audit du HTML ne les voit
+# pas. Une police non servie = retour silencieux a Roboto, c'est-a-dire un
+# webmail qui ne ressemble plus au site. On les controle donc explicitement.
+echo "    -- audit des polices declarees dans meteo.css --"
+FONT_REFS=$(sudo grep -oE 'fonts/[A-Za-z0-9._-]+' "${SKIN_DIR}/styles/meteo.css" | sed 's|.*/||' | sort -u)
+if [ -z "${FONT_REFS}" ]; then
+    echo "    [FAIL] aucune @font-face trouvee dans meteo.css"
+    FAILS=$((FAILS + 1))
+fi
+for font in ${FONT_REFS}; do
+    code=$(curl -sk -o /dev/null -w '%{http_code}' "https://webmail.meteo-test.lan/static.php/skins/meteo/fonts/${font}")
+    if [ "${code}" = "200" ]; then
+        echo "    [PASS] 200  fonts/${font}"
+    else
+        echo "    [FAIL] ${code}  fonts/${font}"
         FAILS=$((FAILS + 1))
     fi
     CHECKS=$((CHECKS + 1))

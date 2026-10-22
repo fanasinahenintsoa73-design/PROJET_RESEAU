@@ -32,6 +32,9 @@
 - [x] **12 bis. Modèles de rédaction** — 5 modèles institutionnels déployés par le mécanisme **natif** `compose_responses_static` : globaux, sans SQL, sans ligne par utilisateur. Insertion dans l'éditeur vérifiée (0 → 582 caractères).
 - [x] **13. Cloisonnement web de production** — 2 pools PHP-FPM distincts (`roundcube` / `pfa`), vhosts internes 8080 / 8081, config Roundcube « derrière proxy » (`use_https`, `proxy_whitelist`, `trusted_host_patterns`), simulateur de Portail. 23 PASS / 0 FAIL, limite d'envoi 2 Mo → **50 Mo**.
 - [x] **14. ClamAV sur les pièces jointes** — ClamAV 1.5.4 + module antivirus Rspamd, refus 554 5.7.1 sur EICAR. Test de référence **4/4** (sain accepté, PJ binaire refusée, PJ texte refusée, corps **non** scanné). 34/34 revalidés.
+- [x] **15. Rspamd 4.2.2 (dépôt officiel)** — migration 2.7 → 4.2.2, D9 fermée, la pile labo est désormais **identique** à la prod. 34/34 revalidés, ClamAV 4/4 revalidé, DKIM toujours signé.
+- [x] **16. Import à l'échelle + quotas par profil + politique de mots de passe** — 400 comptes importés (405 boîtes, 0 doublon, 0 erreur), quotas **pilotés par les données** (2/3/5 Go vérifiés par `doveadm quota get`), politique durcie (12 caractères + dictionnaire institutionnel) testée 12/12. Abandon mesuré du « changement de mot de passe à la 1re connexion ».
+- [x] **17. Refonte du skin selon le design du site réel + test de continuité** — identité visuelle du site `meteomadagascar.mg` (jaune `#F4C910` en action, teal `#17938A` en accent, Open Sans embarquée, boutons 8 px uppercase) ; 2 défauts de rendu corrigés ; **continuité sans MariaDB prouvée** (réception ET livraison maintenues, authentification en `temp_fail`).
 
 ## Phase 10 — Sauvegardes (le volet qui manquait)
 
@@ -299,9 +302,122 @@ Versions publiées : **jammy 3.3 minimum** (version courante **4.2.2**), noble 3
 
 > **Conséquence sur les seuils** : la **ligne de base du score a changé** entre 2.7 et 4.x (0.95 en 2.7 → −0.10 / 0.40 en 4.x pour un message sain). Le seuil de rejet reste à **15** et le test GTUBE est toujours rejeté → pas d'action requise, mais c'est un repère à connaître avant de comparer des scores entre les deux versions (→ D23).
 
+## Phase 16 — Import à l'échelle, quotas par profil, politique de mots de passe
+
+**Scripts :** `24-import-comptes-masse.sh` (import) · `generer-noms-test.py` (échantillon) · `test-password-policy.php` (politique) · `dovecot-sql.conf.labo` (quota piloté par les données) · `postfixadmin-config.local.php` (politique durcie).
+
+### 16.1 Le quota est désormais piloté par les données, plus par une constante
+
+La conception prévoit 2 Go (agent), 3 Go (station), 5 Go (cadre). Le labo avait `quota_rule = *:storage=2G` en dur dans `dovecot.conf` : la colonne `quota` de PostfixAdmin n'était lue par personne.
+
+**Mécanisme mesuré dans le code de Dovecot 2.3** (`src/plugins/quota/quota.c`, branche `release-2.3`) : `quota = maildir:User quota` définit une **racine** nommée « User quota » ; la limite par utilisateur se lit dans le champ userdb **`quota_rule`** (`quota_root_add_rules()` → `mail_user_plugin_getenv(user, "<racine>_rule")`), au format `<masque>:<ressource>=<montant>`.
+
+| Piège | Symptôme | Correctif |
+|---|---|---|
+| Champ userdb `quota` | `Unknown quota backend: storage=5120.0000M` | le backend et la limite ne se melangeent pas : utiliser `quota_rule` |
+| Champ nommé d'après la racine | limite ignorée | `quota_root_parse_set()` n'accepte que `dict:` pour un surcharge ; c'est `quota_rule` qui porte la limite |
+| Unité de la colonne PostfixAdmin | 2 Go = 2 097 152 000 (et non 2 147 483 648) | la CLI stocke des **Mo × 1 024 000 octets** |
+| `ROUND` manquant | Dovecot refuse `5120.0000M` | `ROUND(quota/1024000)` obligatoire |
+
+Requête user_query retenue :
+
+```sql
+SELECT CONCAT('/var/vmail/', maildir) AS home,
+       CASE WHEN quota IS NULL OR quota <= 0 THEN '*:storage=2048M'
+            ELSE CONCAT('*:storage=', ROUND(quota/1024000), 'M') END AS quota_rule
+FROM mailbox WHERE username = '%u' AND active = 1 AND domain = '%d'
+```
+
+**Vérification sur l'import réel** (400 comptes) : répartition en base 315 × 2 Go · 50 × 3 Go · 40 × 5 Go, et `doveadm quota get` confirme les limites appliquées : **5 242 880 Ko** (5 Go) · **3 145 728 Ko** (3 Go) · **2 097 152 Ko** (2 Go).
+
+### 16.2 Import de 400 comptes — 3 blocages d'échelle trouvés et contournés
+
+| Blocage | Symptôme réel | Correctif |
+|---|---|---|
+| `domain.aliases = 1` | « You have reached your limit to create aliases! » | le script relève les limites du domaine avant l'import |
+| `domain.mailboxes = 10` | l'import s'arrêterait à la 10e boîte | idem (relevé automatique) |
+| `postfixadmin mailbox list` **n'existe pas** | aucune collision détectée, comptage faux | une seule requête SQL charge les parties locales de `mailbox` **et** `alias` |
+| table `mailbox` sans colonne `update_password` | le script s'arrêtait au premier compte (`set -euo pipefail`) | commande de mise à jour supprimée |
+
+**Résultat mesuré** : **405 boîtes** (400 importées + 5 de test), **0 doublon** de partie locale, **0 erreur**, 59 collisions d'homonyme résolues par suffixe numérique (`basile.rakoto` → `basile.rakoto2`). Sorties : `adresses-generees.csv` (liste de relecture humaine) et `remise-mots-de-passe.csv` (mode 600, **hors dépôt git**).
+
+### 16.3 Politique de mots de passe durcie — 12/12
+
+**Sémantique réelle de `validate_password()`** (PostfixAdmin 3.3) : chaque entrée de `$CONF['password_validation']` est soit une **regex** (le mot de passe doit la **correspondre**), soit un **callable** (une valeur de retour non vide = échec). Défaut d'origine : 5 caractères minimum, 3 lettres, 2 chiffres — bien en dessous de la conception.
+
+Règle appliquée : 12 caractères minimum · 3 lettres · 2 chiffres · **dictionnaire** (mots de passe courants **et** institutionnels : `meteo`, `meteomadagascar`, `antananarivo`, `bulletin`, `observation`…) · refus des caractère répétés. **Pas d'exigence de caractère spécial** : la conception écrit elle-même que « la longueur compte plus que la complexité » et que `Meteo2024!` est devinable.
+
+**Deux pièges de l'outillage PostfixAdmin :**
+
+1. Le retour d'un **callable n'est pas traduit** (`$result[] = $ret;` sans `Config::lang()`) → le callable doit renvoyer le **texte final**, pas une clé de langue.
+2. `language_hook` est le **nom d'une fonction** qui doit **renvoyer** le tableau `$PALANG` (`common.php` l.100-103) ; les clés personnalisées doivent porter le préfixe `x_`.
+
+Test unitaire `test-password-policy.php` (12 cas, appelle la **vraie** `validate_password()`, détecte aussi les clés de langue non traduites) : **12/12 conformes, 0 clé brute**.
+
+### 16.4 Abandon mesuré du « changement de mot de passe à la première connexion »
+
+La conception (design §8.5) promettait un changement imposé à la 1re connexion. **Mesure** : Roundcube 1.7.4 ne gère pas la réponse IMAP `pass_expired` (recherche « expired » vide dans `rcube_imap.php` et dans les étapes `mail/` et `settings/`). Un agent en webmail — le canal principal, servi par le Portail — verrait donc un **échec de connexion** au lieu de la demande de changement : risque de **verrouiller 300 agents**.
+
+**Décision** : pas d'expiration IMAP. Le contrôle équivalent est un **mot de passe provisoire aléatoire et unique par compte** (20 caractères), remis **individuellement** — un mot de passe partagé par 500 comptes serait devinable par le premier agent qui le teste. Corrigé dans le design doc (§8.5) et §8.7.
+
+### 16.5 Le test de validation lui-même a été corrigé
+
+`12-validation-finale.sh` exigeait « 5 comptes actifs dans la base » ; l'import à l'échelle en a ajouté 400 → **33 PASS / 1 FAIL**, un échec d'artefact. Le critère est devenu un **minimum** paramétrable (`NB_COMPTES_MIN`, défaut 5) → **34 PASS / 0 FAIL**.
+
+## Phase 17 — Refonte du skin selon le design du site réel + test de continuité
+
+### 17.1 La référence visuelle change : le site institutionnel, pas un système de design générique
+
+Consigne : « utilise comme le design de site web meteomadagascar.mg ; integre ce design ». Les couleurs et les règles ont été **extraites du site réel** (WordPress, thème `meteo`, lecture seule des feuilles de style) et non choisies au goût :
+
+| Rôle | Valeur relevée sur le site |
+|---|---|
+| Police | **Open Sans**, corps 14 px / interligne 1.7 (embarquée **localement**, aucun CDN) |
+| Fond / texte | `#FBFBFB` / `#5A5A5A` |
+| Titres | `#333333`, gras 700 |
+| **Action** | **`#F4C910`** (jaune), texte `#333`, **uppercase**, gras 600, `padding 7px 16px`, **rayon 8 px** |
+| **Accent** | **`#17938A`** (teal) : états actifs, icônes, liens, filet de dossier actif |
+| Bandeau / pied | `#34495E` (la couleur du pied de page du site) |
+| Champs | hauteur 38 px, `padding 8px 12px`, bordure `1px solid #CCC`, rayon 6 px |
+| Cartes | rayons 8 à 10 px, bordure `#EFEFEF` |
+| Points de rupture | 576 / 768 / 992 / 1200 px (présets WordPress) + 320 / 635 px (thème) |
+
+Conséquence assumée : le **bleu du Portail `#1E3C72` est abandonné** — la référence est désormais le site institutionnel, le jaune et le teal en tiennent lieu.
+
+### 17.2 Deux défauts de rendu trouvés à la capture, pas à la relecture
+
+1. **Le logo débordait du rail.** Le rail fait 78 px de large ; le logo officiel fait 187 × 77 px. Le skin le dimensionnait à 120 px → débordement masqué par la colonne utilisateur. **Correctif sans traitement d'image** : `object-fit: none` + `object-position: left center` dans un cadre de 46 px → le navigateur dessine le PNG à sa taille naturelle et n'en retient que l'**emblème** (soleil + nuage). Le fichier officiel reste intact.
+2. **La page de connexion perdait une ligne de texte.** `elastic` applique `.task-login #logo { position: relative; top: 16vh }` : le logo sortait du bandeau navy et les deux lignes de texte passaient en **blanc sur blanc**. Correctif : `top: auto` sur `.meteo-login #logo`.
+
+### 17.3 Continuité sans MariaDB — la promesse architecturale, mesurée
+
+`25-test-continuite-sans-mariadb.sh` arrête MariaDB, envoie un message en réception, observe, puis relance la base. **Résultat : `CONTINUITE_OK`.**
+
+| Ce qui a été mesuré | Résultat |
+|---|---|
+| Arrêt de MariaDB | postfix, dovecot et rspamd restent `active` |
+| Envoi en réception (port 25) | accepté : `250 2.0.0 Ok: queued as 8C18A195A` |
+| **Livraison dans le Maildir** | **effective, base toujours arrêtée** : `status=sent (delivered to maildir)`, 1,3 s |
+| Authentification (passdb SQL) | **`code=temp_fail`** — erreur **temporaire**, pas un refus |
+| Après relance de la base | authentification de nouveau opérationnelle, message livré |
+
+**Pourquoi la livraison survit à la panne de base** : `mail_location = maildir:/var/vmail/%d/%n` — le chemin de la boîte est dérivé de l'**adresse** (domaine + partie locale), et non d'une lecture en base. La livraison n'interroge donc pas SQL. C'est la propriété qui rend la promesse n°1 réellement tenue.
+
+**Point de vigilance assumé** : le quota vient de l'annuaire (champ `quota_rule`), il n'est **pas appliqué** pendant la panne. Sans conséquence sur la perte de données, mais à garder en tête.
+
+### 17.4 Trois pièges de vérification rencontrés dans ce seul test
+
+| Piège | Symptôme trompeur | Correctif |
+|---|---|---|
+| Les réponses de `swaks` sont préfixées par `<-  ` | la regex `^\s+250 ` ne matche **jamais** → le script concluait « SMTP n'a pas accepté » alors que le message était accepté | chercher `250 2.0.0 Ok` |
+| `doveadm auth test` renvoie **toujours 0** | le test d'échec paraissait réussi | lire la **sortie** (`auth succeeded` / `auth failed` / `code=temp_fail`) |
+| `grep -q` + `set -o pipefail` | `grep` quitte à la première correspondance, l'écriture en amont est coupée par **SIGPIPE** → code 141 → le test **inverse** son résultat | capturer la sortie dans une variable, puis tester avec `case` (aucun pipeline) |
+
+> Le troisième est **le même piège** que celui rencontré sur `rspamadm configdump` en phase 14. Il est désormais une règle du projet : **ne jamais décider sur la seule foi d'un pipeline `grep -q`**.
+
 ## Résultat final — script `labo/scripts/12-validation-finale.sh`
 
-**34 PASS / 0 FAIL** — rejoué le 2026-10-21 après la phase 14 (ClamAV) et la phase 15 (Rspamd 4.2.2) : aucune régression, **8 services** `active` (postfix, dovecot, rspamd, apache2, mariadb, fail2ban, redis-server, clamav-daemon).
+**34 PASS / 0 FAIL** — rejoué le 2026-10-21 après la phase 14 (ClamAV) et la phase 15 (Rspamd 4.2.2) : aucune régression, **8 services** `active` (postfix, dovecot, rspamd, apache2, mariadb, fail2ban, redis-server, clamav-daemon). Rejoué une dernière fois le **2026-10-22** après les phases 16 et 17 (import de 400 comptes + refonte du skin) : toujours **34 PASS / 0 FAIL**, le critère « nombre de comptes » étant désormais un minimum.
 
 | Bloc | Critères |
 |---|---|
@@ -365,6 +481,11 @@ Versions publiées : **jammy 3.3 minimum** (version courante **4.2.2**), noble 3
 | D22 | `scan_text_mime = false` mais les **pièces jointes texte sont quand même analysées** (mesuré en 2.7) | **re-mesuré en 4.2.2 : comportement identique** (EICAR en PJ texte refusé 554). Reste à revérifier à chaque montée de version de Rspamd |
 | D23 | **Ligne de base du score Rspamd différente** : 0.95 en 2.7 → −0.10 / 0.40 en 4.2.2 pour un message sain (seuil de rejet inchangé à 15) | idem — ne **jamais** comparer un score de labo à un score de prod d'une autre version |
 | D24 | La **purge dpkg** emporte `/var/lib/rspamd/dkim` (la clé DKIM n'appartient pas au paquet) | Conséquence réelle d'un changement de version de Rspamd : **restaurer la clé depuis la sauvegarde avant de purger**, ou la réappliquer après (le script `23-install-rspamd-officiel.sh` le fait) |
+| D25 | Quota **piloté par les données** : PostfixAdmin porte la valeur, Dovecot la lit via le champ userdb `quota_rule` (2 Go / 3 Go / 5 Go par profil) | **identique** — la requête SQL du userdb est la même en prod ; ne pas revenir à un `quota_rule` en dur |
+| D26 | `domain.aliases` / `domain.mailboxes` **relevés automatiquement** avant l'import (valeurs par défaut du paquet : 1 et 10) | idem — un import de 300-400 comptes **échoue** sans ce relevé préalable |
+| D27 | Politique de mots de passe durcie (12 caractères + dictionnaire institutionnel) ; **changement à la 1re connexion abandonné** (Roundcube 1.7.4 ne gère pas `pass_expired`) | **identique** — mot de passe provisoire **aléatoire et unique** par compte, remis individuellement |
+| D28 | Le quota **n'est pas appliqué** pendant une panne de MariaDB (il vient de l'annuaire) ; en revanche la **livraison** se poursuit (chemin de boîte dérivé de l'adresse) | idem — point de vigilance, sans conséquence sur la perte de données |
+| D29 | Identité visuelle du skin = **design du site `meteomadagascar.mg`** (jaune `#F4C910` en action, teal `#17938A` en accent, Open Sans embarquée localement) | **identique** — le logo est recadré par CSS (`object-fit: none`), le fichier officiel 187 × 77 reste intact |
 
 ## Ce qui reste à demander à l'encadrant — checklist interne
 
@@ -458,3 +579,25 @@ print(max(snaps, key=lambda s: s["time"])["short_id"])')
 ## Journal des sorties
 
 (Les sorties validées de chaque phase sont recopiées ici au fil de l'eau.)
+
+### Phase 16 — import à l'échelle (22 octobre 2026)
+
+| Sortie | Valeur mesurée |
+|---|---|
+| Import | **405 boîtes** (400 importées + 5 de test) · 0 doublon de partie locale · 0 erreur · 59 collisions d'homonyme résolues |
+| Quotas en base | 315 × 2 Go · 50 × 3 Go · 40 × 5 Go |
+| Quotas appliqués par Dovecot | **5 242 880 Ko** / **3 145 728 Ko** / **2 097 152 Ko** (3 tirages) |
+| Politique de mots de passe | **12/12** (dont 2 mots de passe communs, 2 institutionnels, 1 répétitif refusés) |
+| Validation globale | **34 PASS / 0 FAIL** |
+| Contrôle de continuité | `CONTINUITE_OK` (voir phase 17) |
+
+### Phase 17 — skin « design du site » + continuité (22 octobre 2026)
+
+| Sortie | Valeur mesurée |
+|---|---|
+| Déploiement du skin | `EXIT=0` · audit HTTP **17/17 PASS** (13 ressources + 4 polices) |
+| Police embarquée | Open Sans Light / Regular / SemiBold / Bold (4 × woff2, signature `wOF2` vérifiée) — **aucun CDN** |
+| Page de connexion | Open Sans 14 px, fond `#FBFBFB`, bouton `#F4C910` / `#333` / uppercase / gras 600 / rayon 8 px / `padding 7px 16px`, champ 38 px / rayon 6 px |
+| Rail de navigation | emblème institutionnel recadré par CSS dans un cadre 46 × 46 (rail 78 px), dossier actif teal + filet gauche 3 px |
+| Tableau de bord | bandeau `#34495E` à titre blanc uppercase, 1 seule action jaune (« Rédiger »), 3 tuiles blanches à icône teal, 2 raccourcis pilules teal |
+| Continuité sans MariaDB | réception **acceptée** (`250 2.0.0 Ok: queued as 8C18A195A`) **et livrée** (`status=sent (delivered to maildir)`, 1,3 s) · authentification en `code=temp_fail` · `CONTINUITE_OK` |
