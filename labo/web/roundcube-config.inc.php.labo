@@ -33,7 +33,7 @@ $config['smtp_conn_options'] = [
 ];
 
 // --- Identite ----------------------------------------------------------------
-$config['product_name'] = 'Meteo Madagascar — Labo';
+$config['product_name'] = 'Météo Madagascar — Labo';
 $config['support_url'] = '';
 $config['des_key'] = '__RC_DES_KEY__';
 $config['username_domain'] = 'meteo-test.lan';  // login court autorise
