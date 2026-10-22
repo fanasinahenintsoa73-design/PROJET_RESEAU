@@ -1,0 +1,31 @@
+# ---------------------------------------------------------------------------
+# Fins de ligne
+# ---------------------------------------------------------------------------
+# Les scripts et configurations de ce depot sont deployes sur un serveur
+# Linux. Une fin de ligne CRLF (Windows) rend un shell script inexecutable
+# et casse les fichiers de configuration. On impose donc LF partout pour le
+# texte, quelle que soit la machine de travail.
+* text=auto
+
+*.sh text eol=lf
+*.py text eol=lf
+*.php text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.md  text eol=lf
+*.json text eol=lf
+*.sql text eol=lf
+*.svg text eol=lf
+*.txt text eol=lf
+*.env text eol=lf
+*.labo text eol=lf
+*.conf text eol=lf
+
+# Fichiers binaires : aucune conversion
+*.woff2 binary
+*.woff  binary
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary

@@ -24,5 +24,18 @@ default_pass_scheme = ARGON2ID
 # Le `%d` empeche la traversee de domaine (un compte de test.lan ne peut pas
 # se connecter en production.mg meme si la table est commune).
 password_query = SELECT username AS user, password AS password FROM mailbox WHERE username = '%u' AND active = 1 AND domain = '%d'
-user_query = SELECT CONCAT('/var/vmail/', maildir) AS home FROM mailbox WHERE username = '%u' AND active = 1 AND domain = '%d'
+
+# QUOTA PAR PROFIL (agent 2 Go / cadre 5 Go / station 3 Go) : la source de
+# verite est la colonne `quota` de la table mailbox (PostfixAdmin), lisible
+# par Dovecot. Unit PostfixAdmin : Mo x 1 024 000 octets (verification
+# empirique : --quota 2048 -> 2 097 152 000). D'ou le /1024000.
+#
+# MECANISME DOVECOT 2.3 (verifie dans le code source, src/plugins/quota/
+# quota.c) : `quota_root_add_rules()` lit le champ de plugin
+# "<nom_racine>_rule" = "quota_rule" via mail_user_plugin_getenv(), qui
+# prend sa valeur dans le USERDB. Le champ `quota` n'existe pas pour ca :
+# un userdb "quota" est interprete comme une definition de backend
+# ("Unknown quota backend: ..."). Le format de la regle est
+# "<masque>:<ressource>=<montant>", ex. "*:storage=5120M".
+user_query = SELECT CONCAT('/var/vmail/', maildir) AS home, CASE WHEN quota IS NULL OR quota <= 0 THEN '*:storage=2048M' ELSE CONCAT('*:storage=', ROUND(quota/1024000), 'M') END AS quota_rule FROM mailbox WHERE username = '%u' AND active = 1 AND domain = '%d'
 iterate_query = SELECT username AS user FROM mailbox WHERE domain = '%d' AND active = 1
