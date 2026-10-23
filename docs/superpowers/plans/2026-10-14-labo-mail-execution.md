@@ -704,3 +704,18 @@ Choix : les gabarits d'elastic restent hérités tels quels (aucun recopiage des
 | Bureau (1440 × 900) | capture `Temp/opencode/sp-settings-v11.png` et `sp-addr-v11.png` : deux listes calmes, barre d'outils contacts intacte (Créer, Rechercher, Importer, Exporter…) |
 | Erreurs console | 0 sur l'enchaînement complet |
 | Contrôle CJK | 0 caractère CJK dans `meteo.js` et `meteo.css` |
+
+## Phase 20 — redaction allégée + divers demandés (22 oct 2026)
+
+Demandes de l'utilisateur : six points, dont « envoyer un message → un écran simple comme Gmail », « un seul lien vers le site », le libellé « Pourriel », et des explications (message envoyé, Contacts, boutons d'actions).
+
+| Mesure | Résultat |
+| --- | --- |
+| Écran de rédaction | gabarit elastic conservé, habillage CSS seule (`meteo.css` section 14, cible `body.action-compose`) ; les trois barres d'outils techniques `.menu.toolbar` (brouillon, signature, orthographe, chiffrement…) = `display:none` — mesuré 0 barre visible |
+| Boutons restés visibles | « Envoyer » (pastille teal) et « Joindre un fichier » (pastille discrète, panneau Options et fichiers joints) ; lien technique « Ouvrir dans une nouvelle fenêtre » caché ; `#composebodycontainer`hauteur 320 px, objet 1.05 rem (mesuré 14.7 px / 41 px) |
+| Envoyés preuve bout-en-bout | clic Envoyer → pigeon envoyé : `doveadm status Sent messages=4` et boîte `luc.ranaivo@…` contient « Test phase 20 redaction simple » ; l'encadrement de rédaction se referme tout seul après l'envoi |
+| Libellé dossier | le squelette `#mailboxlist` affiche « Pourriels » (locale fr) ; script skin remplace → mesuré « Indesirables » (« courriel » = l'e-mail) |
+| Liens externes | la liste de huit liens « Autres services » devien un seul bouton « Site Meteo Madagascar » → https://www.meteomadagascar.mg/ (mesuré 1 entrée) |
+| Bureau 1440 × 900 | capture sp20-final2.png : rédaction épurée, champ prévôts, liste d'options à droite |
+| Erreurs console | 0 sur l'enchaînement complet |
+| Contrôle CJK | 0 caractère CJK dans `meteo.js` et `meteo.css` |

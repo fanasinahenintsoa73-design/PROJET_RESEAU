@@ -1489,3 +1489,97 @@ body.task-addressbook #layout-sidebar {
 		font-size: .78rem;
 	}
 }
+
+/* ------------------------------------------------------------------
+   14. Redaction : ecran simple, proche d'une application de messagerie
+   grand public. La page de redaction porte body.action-compose.
+   On cache les barres techniques du haut (enregistrer le brouillon,
+   signature, orthographe, chiffrement...) pour ne garder que les
+   deux boutons reels (Envoyer et Joindre un fichier), on agrandit
+   l'objet et la zone du message, et on habille le bouton Envoyer
+   en pastille teal.
+   ------------------------------------------------------------------ */
+body.action-compose {
+	background: var(--meteo-surface);
+}
+
+/* barres techniques au-dessus du formulaire */
+body.action-compose .menu.toolbar,
+body.action-compose #composestatusbar {
+	display: none;
+}
+
+/* le formulaire respire */
+body.action-compose #compose-content {
+	display: flex;
+	flex-direction: column;
+	padding: 1.4rem 1.6rem 0;
+}
+
+/* objet du message : large et lisible */
+body.action-compose #compose-subject {
+	font-size: 1.05rem !important;
+	height: 2.9rem !important;
+}
+
+/* zone du message : elle prend tout l'espace restant */
+body.action-compose #composebodycontainer {
+	flex: 1 1 auto;
+	min-height: 320px;
+}
+
+body.action-compose #composebody {
+	width: 100%;
+	height: 100%;
+	min-height: 320px;
+	font-size: 1rem;
+	line-height: 1.55;
+	border-radius: var(--meteo-radius);
+	background: #fff;
+}
+
+/* Envoyer : pastille teal (action principale) */
+body.action-compose .formbuttons .btn-primary.send {
+	background: var(--meteo-teal);
+	border: 0;
+	border-radius: 999px;
+	padding: .7rem 1.7rem;
+	font-size: .95rem;
+	font-weight: 600;
+}
+
+/* Joindre un fichier : bouton secondaire discret */
+body.action-compose .formbuttons .btn-secondary.attach {
+	border-radius: 999px;
+	padding: .7rem 1.2rem;
+}
+
+/* le lien technique « ouvrir dans une nouvelle fenetre » n apporte rien */
+body.action-compose .formbuttons .extwin {
+	display: none;
+}
+
+/* Joindre un fichier : pastille secondaire, dans le panneau « Options et
+   fichiers joints » */
+body.action-compose .btn.btn-secondary.attach {
+	padding: .7rem 1.2rem;
+	border-radius: 999px;
+}
+
+body.action-compose .formbuttons {
+	justify-content: flex-end;
+	margin-top: 1.2rem;
+	padding-bottom: 1.4rem;
+}
+
+/* Telephones : la zone du message garde une hauteur confortable */
+@media (max-width: 767px) {
+	body.action-compose #composebody,
+	body.action-compose #composebodycontainer {
+		min-height: 220px;
+	}
+
+	body.action-compose #compose-content {
+		padding: 1rem 1rem 0;
+	}
+}

@@ -89,6 +89,30 @@
         var n = item ? item.textContent.trim() : '';
         badge.textContent = n;
         badge.style.display = n ? '' : 'none';
+        renameJunk();
+    }
+
+    /* Etiquette du dossier des messages indesirables : Roundcube l'appelle
+       « Pourriel » ; on affiche « Indesirables », plus clair car « courriel »
+       veut dire e-mail. L'operation repete plus d'une fois ne casse rien. */
+    function renameJunk() {
+        var list = byId('mailboxlist');
+        if (!list) {
+            return;
+        }
+        var links = list.querySelectorAll('a');
+        for (var k = 0; k < links.length; k++) {
+            var a = links[k];
+            if (a.textContent.indexOf('Pourriel') === -1) {
+                continue;
+            }
+            var nodes = a.childNodes;
+            for (var i = 0; i < nodes.length; i++) {
+                if (nodes[i].nodeType === 3 && nodes[i].nodeValue.indexOf('Pourriel') !== -1) {
+                    nodes[i].nodeValue = nodes[i].nodeValue.replace(/Pourriels?/g, 'Indesirables');
+                }
+            }
+        }
     }
 
     /* ------------------------------------------------------------------
