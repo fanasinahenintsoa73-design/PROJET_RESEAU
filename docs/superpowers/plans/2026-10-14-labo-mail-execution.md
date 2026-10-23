@@ -689,3 +689,18 @@ print(max(snaps, key=lambda s: s["time"])["short_id"])')
 | **Envoi réel** | message **reçu** par le destinataire (IMAP : `From: tiana.rakoto@…`, `To: luc.ranaivo@…`, `Date: Thu, 22 Oct 2026 15:40:30 +0300`) |
 | Téléphone (375 × 812) | 1 colonne · grille d'actions **2 × 2** (176 px × 2) · panneau latéral en tiroir (`translateX(-280)`) · recherche déplacée dans la grille |
 | Validation globale | **34 PASS / 0 FAIL** |
+
+### Phase 19 — écrans natifs harmonisés (22 octobre 2026)
+
+Demande : « tous les boutons doivent rediriger vers le Roundcube, et ce Roundcube doit être facile à utiliser ».
+
+Choix : les gabarits d'elastic restent hérités tels quels (aucun recopiage des templates settings/addressbook, zéro risque sur la logique Roundcube et toujours zéro PHP) ; `meteo.js` installe le bandeau Météo sur les tâches hors messagerie, et `meteo.css` (section 13) écarte le rail technique. Les pages internes encadrées (formulaire d'édition d'une identité, etc.) ne reçoivent pas le bandeau (elles servent de cadre à un formulaire seul).
+
+| Sortie | Valeur mesurée |
+|---|---|
+| Bandeau hors messagerie | installé sur `task-settings` et `task-addressbook` : marque « Meteo Madagascar » + nav « Mes messages / Mes contacts / Mes parametres », pastille jaune sur le service affiché |
+| Rail technique caché | `#taskmenu` (Mode sombre, À propos de, Rédiger…) et `#layout-menu` (rail vertical) en `display: none` — mesuré `none` sur les deux écrans |
+| Chaîne validée au clic | page unique → tuile « Parametres » → écran bandé (`sub = Parametres`) → lien « Mes contacts » → contacts (`sub = Contacts`, groupes Adresses personnelles / Destinataires recueillis / Expéditeurs de confiance) |
+| Bureau (1440 × 900) | capture `Temp/opencode/sp-settings-v11.png` et `sp-addr-v11.png` : deux listes calmes, barre d'outils contacts intacte (Créer, Rechercher, Importer, Exporter…) |
+| Erreurs console | 0 sur l'enchaînement complet |
+| Contrôle CJK | 0 caractère CJK dans `meteo.js` et `meteo.css` |

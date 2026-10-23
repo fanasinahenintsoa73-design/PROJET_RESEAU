@@ -442,6 +442,46 @@
     }
 
     /* ------------------------------------------------------------------
+       Bandeau des taches hors messagerie (parametres, contacts)
+       ------------------------------------------------------------------ */
+
+    function installBand(label) {
+        var band = document.createElement('header');
+        band.id = 'meteo-band';
+        band.innerHTML =
+            '<div class="meteo-band-brand">' +
+                '<img class="meteo-band-logo" src="/static.php/skins/meteo/images/logo.svg" alt="Meteo Madagascar" />' +
+                '<span class="meteo-band-names">' +
+                    '<span class="meteo-band-title">Meteo Madagascar</span>' +
+                    '<span class="meteo-band-sub">' + label + '</span>' +
+                '</span>' +
+            '</div>' +
+            '<nav class="meteo-band-nav" aria-label="Changer de service">' +
+                '<a href="./?_task=mail&amp;_mbox=INBOX">Mes messages</a>' +
+                '<a href="./?_task=addressbook">Mes contacts</a>' +
+                '<a href="./?_task=settings">Mes parametres</a>' +
+            '</nav>' +
+            '<div class="meteo-band-user"></div>';
+        document.body.prepend(band);
+    }
+
+    function startNonMail() {
+        var label = null;
+        if (document.documentElement.classList.contains('iframe')) {
+            return;
+        }
+        if (body.classList.contains('task-settings')) {
+            label = 'Parametres';
+        } else if (body.classList.contains('task-addressbook')) {
+            label = 'Contacts';
+        }
+        if (label === null || body.classList.contains('action-compose')) {
+            return;
+        }
+        installBand(label);
+    }
+
+    /* ------------------------------------------------------------------
        Demarrage
        ------------------------------------------------------------------ */
 
@@ -450,9 +490,11 @@
 
         /* La page unique ne concerne que la tache « mail ». La page de
            redaction (action-compose) a son propre gabarit : on n'y touche
-           pas. */
+           pas. Les autres taches (parametres, contacts) recoivent le
+           bandeau Météo via startNonMail(). */
         if (!body || !body.classList.contains('task-mail')
             || body.classList.contains('action-compose')) {
+            startNonMail();
             return;
         }
 

@@ -1397,3 +1397,95 @@ body.task-mail:not(.action-compose) #layout-content .header {
 		background-color: #fff;
 	}
 }
+
+/* =====================================================================
+   Section 13 : taches hors messagerie (parametres, contacts)
+   Un bandeau Meteo identique a celui de la page unique est installe par
+   meteo.js devant la mise en page d'elastic. La navigation entre
+   services se fait par les liens du bandeau : le rail technique de
+   Roundcube (« Rediger, Courriel, Mode sombre, A propos de »)
+   n'apparait plus.
+   ===================================================================== */
+
+body.task-settings,
+body.task-addressbook {
+	display: flex;
+	flex-direction: column;
+	height: 100vh;
+	overflow: hidden;
+}
+
+body.task-settings #layout,
+body.task-addressbook #layout {
+	flex: 1 1 auto;
+	min-height: 0;
+	height: auto;
+}
+
+body.task-settings #taskmenu,
+body.task-addressbook #taskmenu {
+	display: none !important;
+}
+
+/* Le rail vertical d'elastic (celui qui portait le logo flottant) : le
+   logo est deja dans le bandeau Météo. */
+body.task-settings #layout-menu,
+body.task-addressbook #layout-menu {
+	display: none;
+}
+
+#meteo-band .meteo-band-nav {
+	display: flex;
+	align-items: center;
+	gap: .3rem;
+	margin-right: auto;
+	margin-left: 1.25rem;
+	flex-wrap: wrap;
+}
+
+#meteo-band .meteo-band-nav a {
+	color: var(--meteo-body);
+	font-weight: 600;
+	font-size: .85rem;
+	text-decoration: none;
+	padding: .35rem .8rem;
+	border-radius: 999px;
+	border: 1px solid transparent;
+	white-space: nowrap;
+}
+
+#meteo-band .meteo-band-nav a:hover {
+	background-color: var(--meteo-canvas);
+	border-color: var(--meteo-hairline);
+	color: var(--meteo-ink);
+}
+
+/* Le service affiche : pastille jaune, comme la tuile d'action du site. */
+body.task-addressbook #meteo-band .meteo-band-nav a[href$="_task=addressbook"],
+body.task-settings #meteo-band .meteo-band-nav a[href$="_task=settings"] {
+	background-color: var(--meteo-yellow);
+	color: var(--meteo-navy);
+}
+
+/* Le panneau des dossiers de contacts s'adapte au bandeau. */
+body.task-addressbook #layout-sidebar {
+	padding-top: .25rem;
+}
+
+/* Telephones : bandeau compact, liens de nav etroitement calees. */
+@media (max-width: 767.98px) {
+	body.task-settings,
+	body.task-addressbook {
+		height: 100dvh;
+	}
+
+	#meteo-band .meteo-band-nav {
+		margin-left: .5rem;
+		gap: .1rem;
+	}
+
+	#meteo-band .meteo-band-nav a {
+		padding: .3rem .55rem;
+		font-size: .78rem;
+	}
+}
