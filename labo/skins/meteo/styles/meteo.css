@@ -1202,8 +1202,11 @@ body.task-mail:not(.action-compose) #messagelist-content {
 
 /* Le cadre de lecture d'elastic n'est plus utilise : Roundcube 1.7
    remplace la page entiere a l'ouverture d'un message. On le laisse en
-   place mais invisible, et on pose notre propre panneau par-dessus. */
-body.task-mail:not(.action-compose) #layout-content {
+   place mais invisible, et on pose notre propre panneau par-dessus.
+   La regle ne vise que la page principale : les vues chargees dans
+   l'iframe (_framed=1) portent la classe "iframe" sur <html> et
+   doivent rester visibles (message affiche dans le panneau). */
+html:not(.iframe) body.task-mail:not(.action-compose) #layout-content {
 	position: fixed;
 	inset: 0;
 	z-index: 60;
@@ -1213,7 +1216,7 @@ body.task-mail:not(.action-compose) #layout-content {
 	pointer-events: none;
 }
 
-body.task-mail:not(.action-compose) #layout-content .header {
+html:not(.iframe) body.task-mail:not(.action-compose) #layout-content .header {
 	background-color: var(--meteo-surface);
 	border-bottom: 1px solid var(--meteo-hairline);
 }
@@ -1257,6 +1260,10 @@ body.task-mail:not(.action-compose) #layout-content .header {
 .meteo-read-actions {
 	display: flex;
 	gap: .35rem;
+}
+
+.meteo-read-actions [hidden] {
+	display: none;
 }
 
 .meteo-read-bar .meteo-btn {
@@ -1582,4 +1589,12 @@ body.action-compose .formbuttons {
 	body.action-compose #compose-content {
 		padding: 1rem 1rem 0;
 	}
+}
+
+/* Correctif Roundcube : le calque transparent ajoute au-dessus du cadre
+   de fond (messagecontframe) pendant un clic dans la liste avale le
+   relachement de la souris et empeche l'ouverture des messages. Il ne
+   doit jamais intercepter les evenements de pointeur. */
+div.iframe-dragdrop-fix {
+	pointer-events: none !important;
 }

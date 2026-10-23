@@ -375,31 +375,62 @@
             title.textContent = subject || 'Message';
         }
         var params = queryParams(href);
+        /* Dans la corbeille, les actions de reponse n'ont pas de sens :
+           on propose « Restaurer » (retour dans la boite de reception)
+           et « Supprimer definitivement ». */
+        var trash = (window.rcmail && rcmail.env && rcmail.env.trash_mailbox) || 'Trash';
+        var inTrash = params._mbox === trash;
         var reply = byId('meteo-read-reply');
         var replyall = byId('meteo-read-replyall');
         var forward = byId('meteo-read-forward');
         var print = byId('meteo-read-print');
+        var restore = byId('meteo-read-restore');
+        var purge = byId('meteo-read-delete');
         if (reply) {
+            reply.hidden = inTrash;
             reply.onclick = function () {
                 openComposeFor(params, 'reply');
                 return false;
             };
         }
         if (replyall) {
+            replyall.hidden = inTrash;
             replyall.onclick = function () {
                 openComposeFor(params, 'reply', true);
                 return false;
             };
         }
         if (forward) {
+            forward.hidden = inTrash;
             forward.onclick = function () {
                 openComposeFor(params, 'forward');
                 return false;
             };
         }
         if (print) {
+            print.hidden = inTrash;
             print.setAttribute('href', actionUrl(params, 'print', false));
             print.setAttribute('target', '_blank');
+        }
+        if (restore) {
+            restore.hidden = !inTrash;
+            restore.onclick = function () {
+                if (inTrash) {
+                    rcmail.move_messages('INBOX', null, [params._uid]);
+                }
+                closeRead();
+                return false;
+            };
+        }
+        if (purge) {
+            purge.hidden = !inTrash;
+            purge.onclick = function () {
+                if (inTrash) {
+                    rcmail.permanently_remove_messages(params._uid);
+                }
+                closeRead();
+                return false;
+            };
         }
         overlay.hidden = false;
         body.classList.add('meteo-read-open');
@@ -408,18 +439,44 @@
 
     /* Interception du clic sur le sujet, en phase de capture : on empeche
        la navigation de Roundcube et on ouvre l'overlay de lecture. */
+    /* Interception du clic dans la liste : TOUTE la ligne ouvre le
+       message (le geste le plus simple pour le personnel), sauf icone
+       d'etoile/piece jointe ou clic avec Ctrl/Maj/Alt (selection). */
     function interceptRead() {
         document.addEventListener('click', function (ev) {
-            var link = null;
-            if (ev.target && ev.target.closest) {
-                link = ev.target.closest('#messagelist a[href*="_action=show"]');
+            if (!ev.target || !ev.target.closest) {
+                return;
             }
+            /* Ctrl/Maj/Alt restent des selections pour Roundcube. */
+            if (ev.ctrlKey || ev.shiftKey || ev.metaKey || ev.altKey) {
+                return;
+            }
+            var row = ev.target.closest('#messagelist tbody tr');
+            if (!row) {
+                return;
+            }
+            /* Etoile, fils de discussion et icone de piece jointe gardent
+               leur propre fonction. */
+            if (ev.target.closest('td.flag, td.threads, td.icon, td.attachment, a.recyclerview')) {
+                return;
+            }
+            var cell = ev.target.closest('#messagelist td.subject');
+            var link = cell
+                ? cell.querySelector('a[href*="_action=show"], a[href*="_action=compose"]')
+                : row.querySelector('td.subject a[href*="_action=show"], td.subject a[href*="_action=compose"]');
             if (!link) {
                 return;
             }
             ev.preventDefault();
             ev.stopPropagation();
-            openRead(link.getAttribute('href'), (link.textContent || '').trim());
+            var href = link.getAttribute('href') || '';
+            if (href.indexOf('_action=compose') !== -1) {
+                /* Brouillon : on ouvre la redaction chargee depuis ce
+                   brouillon (action compose + _draft_uid). */
+                openComposeFor(queryParams(href), 'draft');
+                return;
+            }
+            openRead(href, (link.textContent || '').trim());
         }, true);
     }
 
