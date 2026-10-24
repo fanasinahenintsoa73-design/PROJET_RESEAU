@@ -540,6 +540,75 @@
         });
     }
 
+    /* Les photos recues s'ouvrent en grand dans notre propre visionneuse :
+       le clic sur l'apercu ou sur « Afficher » reste dans la page. */
+
+    function showPhoto(url) {
+        var overlay = byId('meteo-photo');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'meteo-photo';
+            overlay.innerHTML = '<button type="button" class="meteo-photo-close" aria-label="Fermer">&times;</button>'
+                + '<img alt="Photo" />';
+            overlay.addEventListener('click', function (ev) {
+                if (ev.target === overlay || (ev.target.closest && ev.target.closest('.meteo-photo-close'))) {
+                    hidePhoto();
+                }
+            });
+            document.body.appendChild(overlay);
+        }
+        if (url.indexOf('_embed=') === -1) {
+            url += (url.indexOf('?') === -1 ? '?' : '&') + '_embed=1';
+        }
+        overlay.querySelector('img').src = url;
+        overlay.hidden = false;
+        body.classList.add('meteo-photo-open');
+        return false;
+    }
+
+    function hidePhoto() {
+        var overlay = byId('meteo-photo');
+        if (!overlay) {
+            return;
+        }
+        overlay.hidden = true;
+        overlay.querySelector('img').removeAttribute('src');
+        body.classList.remove('meteo-photo-open');
+    }
+
+    function hookPhotoLinks(frame) {
+        var doc;
+        try {
+            doc = frame.contentDocument;
+        } catch (err) {
+            return;
+        }
+        if (!doc || doc.__meteoPhotos) {
+            return;
+        }
+        doc.__meteoPhotos = true;
+        doc.addEventListener('keydown', function (ev) {
+            if (ev.key === 'Escape') {
+                hidePhoto();
+            }
+        });
+        doc.addEventListener('click', function (ev) {
+            var link = ev.target && ev.target.closest
+                ? ev.target.closest('.image-attachment a.image-link, .image-attachment .attachment-links a.open')
+                : null;
+            if (!link) {
+                return;
+            }
+            var href = link.getAttribute('href') || '';
+            if (!href || href === '#' || href.indexOf('_action=get') === -1) {
+                return;
+            }
+            ev.preventDefault();
+            ev.stopPropagation();
+            showPhoto(href);
+        }, true);
+    }
+
     function watchReadFrame() {
         var frame = byId('meteo-read-frame');
         if (!frame || frame.__meteoRestyle) {
@@ -548,6 +617,7 @@
         frame.__meteoRestyle = true;
         frame.addEventListener('load', function () {
             restyleReadFrame(frame);
+            hookPhotoLinks(frame);
         });
     }
 
@@ -583,7 +653,9 @@
             if (ev.key !== 'Escape') {
                 return;
             }
-            if (body.classList.contains('meteo-compose-open')) {
+            if (body.classList.contains('meteo-photo-open')) {
+                hidePhoto();
+            } else if (body.classList.contains('meteo-compose-open')) {
                 window.meteoComposeClose();
             } else if (body.classList.contains('meteo-read-open')) {
                 closeRead();
