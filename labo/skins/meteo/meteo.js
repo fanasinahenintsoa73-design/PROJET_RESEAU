@@ -481,6 +481,74 @@
     }
 
     /* ------------------------------------------------------------------
+       5 bis. Mise en forme des echanges dans le cadre de lecture.
+       La citation (message precedent) reste neutre ; la reponse qui la
+       suit est enveloppee et posee en retrait avec un liseré vert.
+       ------------------------------------------------------------------ */
+
+    function restyleReadFrame(frame) {
+        var doc;
+        try {
+            doc = frame.contentDocument;
+        } catch (err) {
+            return;
+        }
+        if (!doc || !doc.body || doc.querySelector('.meteo-reply-part')) {
+            return;
+        }
+        var text = doc.querySelector('#messagebody .rcmBody')
+            || doc.getElementById('messagebody')
+            || doc.body;
+
+        /* Facon conversation : dans la boite de reception, le message recu
+           (l'expediteur) reste neutre a gauche et la citation (nos propres
+           messages) devient la bulle verte a droite. Dans les autres
+           dossiers (Envoyes...), on garde la reponse de l'utilisateur en
+           bulle verte a droite. */
+        var mboxMatch = /[?&]_mbox=([^&]+)/.exec(frame.getAttribute('src') || '');
+        var mbox = mboxMatch ? decodeURIComponent(mboxMatch[1]) : '';
+        var sentBox = (window.rcmail && rcmail.env && rcmail.env.sent_mailbox) || 'Sent';
+        doc.documentElement.classList.add(mbox === sentBox ? 'meteo-sent-view' : 'meteo-incoming-view');
+
+        var quote = text.querySelector('blockquote[type="cite"]');
+        if (!quote) {
+            return;
+        }
+        /* Remonter jusqu'au bloc de premier niveau qui contient la citation. */
+        var top = quote;
+        while (top.parentNode && top.parentNode !== text) {
+            top = top.parentNode;
+        }
+        var nodes = [];
+        var node = top.nextSibling;
+        while (node) {
+            nodes.push(node);
+            node = node.nextSibling;
+        }
+        if (!nodes.length) {
+            return;
+        }
+        /* La reponse (tout ce qui suit la citation) recoit le liseré vert. */
+        var wrap = doc.createElement('div');
+        wrap.className = 'meteo-reply-part';
+        text.insertBefore(wrap, nodes[0]);
+        nodes.forEach(function (n) {
+            wrap.appendChild(n);
+        });
+    }
+
+    function watchReadFrame() {
+        var frame = byId('meteo-read-frame');
+        if (!frame || frame.__meteoRestyle) {
+            return;
+        }
+        frame.__meteoRestyle = true;
+        frame.addEventListener('load', function () {
+            restyleReadFrame(frame);
+        });
+    }
+
+    /* ------------------------------------------------------------------
        6. Interception de la commande « compose »
        Roundcube ouvre la redaction par une navigation complete. On la
        remplace par le panneau superpose, sans toucher au PHP.
@@ -546,6 +614,179 @@
         document.body.prepend(band);
     }
 
+    /* ------------------------------------------------------------------
+       Accueil des parametres, facon Gmail : des cartes simples.
+       ------------------------------------------------------------------ */
+
+    var SETTINGS_SECTIONS = [
+        { id: 'general', title: 'Interface', desc: 'Langue, apparence et affichage general.' },
+        { id: 'mailbox', title: 'Boite de reception', desc: 'Nombre de lignes et tri des messages.' },
+        { id: 'mailview', title: 'Lecture des messages', desc: 'Images, HTML et apercu des courriels.' },
+        { id: 'compose', title: 'Redaction', desc: 'Signature, reponses et confirmation d envoi.' },
+        { id: 'addressbook', title: 'Contacts', desc: 'Carnet d adresses et listes de diffusion.' },
+        { id: 'folders', title: 'Dossiers', desc: 'Corbeille, envoyes et indesirables.' },
+        { id: 'server', title: 'Serveur', desc: 'Envoi et parametres du serveur de courriel.' },
+        { id: 'encryption', title: 'Securite', desc: 'Chiffrement et signature des messages.' }
+    ];
+
+    function esc(text) {
+        return String(text == null ? '' : text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function bandBottom() {
+        var band = byId('meteo-band');
+        return band ? Math.round(band.getBoundingClientRect().bottom) : 35;
+    }
+
+    function placeOverlay(el) {
+        var place = function () {
+            el.style.top = bandBottom() + 'px';
+        };
+        place();
+        window.addEventListener('resize', place);
+    }
+
+    function settingsHome() {
+        if (byId('meteo-settings-home')) {
+            return;
+        }
+        var cards = SETTINGS_SECTIONS.map(function (section) {
+            return '<a class="meteo-setting-card" href="./?_task=settings&amp;_action=preferences&amp;_section=' + section.id + '">'
+                + '<span class="meteo-setting-title">' + esc(section.title) + '</span>'
+                + '<span class="meteo-setting-desc">' + esc(section.desc) + '</span>'
+                + '</a>';
+        }).join('');
+        var home = document.createElement('section');
+        home.id = 'meteo-settings-home';
+        home.setAttribute('aria-label', 'Parametres');
+        home.innerHTML =
+            '<div class="meteo-home-inner">'
+            + '<h1 class="meteo-home-title">Parametres</h1>'
+            + '<p class="meteo-home-lead">Reglez ici les usages courants. Chaque carte ouvre une page simple.</p>'
+            + '<nav class="meteo-home-grid" aria-label="Sections des parametres">' + cards + '</nav>'
+            + '</div>';
+        document.body.appendChild(home);
+        placeOverlay(home);
+    }
+
+    /* Annuaire des agents : liste des boites du domaine, generee au
+       deploiement dans agents.js par le script 19-deploy-skin.sh. */
+
+    function agentsPanel() {
+        if (byId('meteo-agents-panel')) {
+            return;
+        }
+        var panel = document.createElement('section');
+        panel.id = 'meteo-agents-panel';
+        panel.setAttribute('aria-label', 'Agents Meteo');
+        panel.innerHTML =
+            '<div class="meteo-agents-inner">'
+            + '<h1 class="meteo-home-title">Agents Meteo Madagascar</h1>'
+            + '<p class="meteo-home-lead">Annuaire de la messagerie. Cliquez sur Ecrire pour joindre un agent.</p>'
+            + '<input type="search" id="meteo-agent-search" class="meteo-agent-search" placeholder="Rechercher un nom ou un courriel" autocomplete="off" />'
+            + '<p id="meteo-agent-count" class="meteo-home-lead"></p>'
+            + '<ul id="meteo-agent-list" class="meteo-agent-list"></ul>'
+            + '</div>';
+        document.body.appendChild(panel);
+        placeOverlay(panel);
+        var search = byId('meteo-agent-search');
+        if (search) {
+            search.addEventListener('input', filterAgents);
+        }
+        loadAgents();
+    }
+
+    function loadAgents() {
+        var done = function () {
+            filterAgents();
+        };
+        if (window.METEO_AGENTS) {
+            done();
+            return;
+        }
+        var script = document.createElement('script');
+        script.src = '/static.php/skins/meteo/agents.js';
+        script.onload = done;
+        script.onerror = function () {
+            window.METEO_AGENTS = [];
+            done();
+        };
+        document.head.appendChild(script);
+    }
+
+    function filterAgents() {
+        var list = byId('meteo-agent-list');
+        if (!list) {
+            return;
+        }
+        var search = byId('meteo-agent-search');
+        var query = search ? search.value.trim().toLowerCase() : '';
+        var agents = (window.METEO_AGENTS || []).filter(function (agent) {
+            return !query || (agent.name + ' ' + agent.email).toLowerCase().indexOf(query) !== -1;
+        });
+        list.innerHTML = agents.slice(0, 200).map(function (agent) {
+            var initial = (agent.name || agent.email).charAt(0).toUpperCase();
+            return '<li class="meteo-agent" data-search="' + esc((agent.name + ' ' + agent.email).toLowerCase()) + '">'
+                + '<span class="meteo-agent-avatar" aria-hidden="true">' + esc(initial) + '</span>'
+                + '<span class="meteo-agent-id">'
+                + '<span class="meteo-agent-name">' + esc(agent.name) + '</span>'
+                + '<span class="meteo-agent-mail">' + esc(agent.email) + '</span>'
+                + '</span>'
+                + '<a class="meteo-agent-write" href="./?_task=mail&amp;_mbox=INBOX&amp;_meteo_to=' + encodeURIComponent(agent.email) + '">Ecrire</a>'
+                + '</li>';
+        }).join('');
+        if (!agents.length) {
+            list.innerHTML = '<li class="meteo-agent-empty">Aucun agent ne correspond.</li>';
+        }
+        var count = byId('meteo-agent-count');
+        if (count) {
+            count.textContent = agents.length + ' agent' + (agents.length > 1 ? 's' : '') + ' affiche' + (agents.length > 1 ? 's' : '');
+        }
+    }
+
+    /* Depuis l'annuaire, « Ecrire » revient sur la messagerie : on ouvre
+       directement la redaction adressee a l'agent. */
+
+    function composeToFromUrl() {
+        var match = /[?&]_meteo_to=([^&]+)/.exec(location.search);
+        if (!match) {
+            return;
+        }
+        var email = decodeURIComponent(match[1]);
+        try {
+            var clean = location.search.replace(/([?&])_meteo_to=[^&]*&?/, '$1').replace(/[?&]$/, '');
+            window.history.replaceState({}, document.title, location.pathname + clean);
+        } catch (e) { /* historique indisponible */ }
+        openCompose('?_task=mail&_action=compose&_framed=1&_to=' + encodeURIComponent(email));
+    }
+
+    /* La tuile « Tous les messages » declenche une recherche multifolder
+       en XHR (scope=all) : la navigation pleine page vers _action=search
+       n'a pas de gabarit et renvoie 404. Repli : navigation ordinaire si
+       l'API Roundcube n'est pas disponible. */
+    function interceptAllMail() {
+        document.addEventListener('click', function (ev) {
+            var tile = ev.target && ev.target.closest
+                ? ev.target.closest('a.meteo-tile-all') : null;
+            if (!tile) {
+                return;
+            }
+            if (!window.rcmail || typeof rcmail.qsearch !== 'function'
+                || typeof rcmail.set_searchscope !== 'function') {
+                return;
+            }
+            ev.preventDefault();
+            ev.stopPropagation();
+            rcmail.set_searchscope('all');
+            rcmail.qsearch('text:@');
+        }, true);
+    }
+
     function startNonMail() {
         var label = null;
         if (document.documentElement.classList.contains('iframe')) {
@@ -560,6 +801,13 @@
             return;
         }
         installBand(label);
+        if (body.classList.contains('task-settings')
+            && body.classList.contains('action-none')) {
+            settingsHome();
+        } else if (body.classList.contains('task-addressbook')
+            && body.classList.contains('action-none')) {
+            agentsPanel();
+        }
     }
 
     /* ------------------------------------------------------------------
@@ -581,6 +829,9 @@
 
         interceptCompose();
         interceptRead();
+        interceptAllMail();
+        watchReadFrame();
+        composeToFromUrl();
         bindKeys();
         placeSearch();
         refreshInboxCount();

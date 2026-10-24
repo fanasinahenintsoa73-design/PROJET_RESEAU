@@ -60,6 +60,38 @@ sudo find "${SKIN_DIR}" -type d -exec chmod 755 {} \;
 sudo find "${SKIN_DIR}" -type f -exec chmod 644 {} \;
 echo "[OK] copie terminee"
 
+# ------------------------------------------------- 2c. annuaire des agents
+# La page Contacts du skin affiche la liste des boites actives du domaine
+# (les agents Meteo). Les donnees sont figees au deploiement dans agents.js,
+# servi par static.php comme le reste du skin.
+echo "[..] generation de l'annuaire des agents (agents.js)"
+AGENTS_TSV="$(mktemp)"
+AGENTS_JS="${SKIN_DIR}/agents.js"
+if sudo mysql -N -B -e "SELECT username, COALESCE(NULLIF(name, ''), username) FROM postfix.mailbox WHERE active = 1 ORDER BY name, username" > "${AGENTS_TSV}" 2>/dev/null; then
+    sudo php -r '
+        $rows = file($argv[1], FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        $agents = [];
+        foreach ($rows as $row) {
+            $parts = explode("\t", $row, 2);
+            if (count($parts) < 2) {
+                continue;
+            }
+            $agents[] = ["email" => $parts[0], "name" => $parts[1]];
+        }
+        file_put_contents($argv[2], "window.METEO_AGENTS = " . json_encode($agents, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ";\n");
+    ' "${AGENTS_TSV}" "${AGENTS_JS}"
+    sudo chown www-data:www-data "${AGENTS_JS}"
+    sudo chmod 644 "${AGENTS_JS}"
+    echo "    $(wc -l < "${AGENTS_TSV}") agents ecrits"
+else
+    echo "    [ATTENTION] lecture de postfix.mailbox impossible : annuaire vide"
+    echo "window.METEO_AGENTS = [];" | sudo tee "${AGENTS_JS}" >/dev/null
+    sudo chown www-data:www-data "${AGENTS_JS}"
+    sudo chmod 644 "${AGENTS_JS}"
+fi
+rm -f "${AGENTS_TSV}"
+echo "[OK] annuaire des agents"
+
 # ------------------------------------------------- 2b. liens symboliques .min.css
 # Roundcube resout "/styles/styles.css" vers <skin_courant>/styles/styles.css
 # puis, via file_mod(), tente <skin_courant>/styles/styles.min.css.
@@ -215,7 +247,22 @@ else
 fi
 CHECKS=$((CHECKS + 1))
 
-# Les @font-face sont declares DANS meteo.css : l'audit du HTML ne les voit
+# Annuaire des agents (page Contacts) : fichier genere a l'etape 2c.
+echo "    -- audit de l'annuaire des agents --"
+if sudo grep -q 'window.METEO_AGENTS' "${SKIN_DIR}/agents.js" 2>/dev/null; then
+    echo "    [PASS] agents.js genere"
+else
+    echo "    [FAIL] agents.js absent ou invalide"
+    FAILS=$((FAILS + 1))
+fi
+code=$(curl -sk -o /dev/null -w '%{http_code}' "https://webmail.meteo-test.lan/static.php/skins/meteo/agents.js")
+if [ "${code}" = "200" ]; then
+    echo "    [PASS] 200  static.php/skins/meteo/agents.js"
+else
+    echo "    [FAIL] ${code}  static.php/skins/meteo/agents.js"
+    FAILS=$((FAILS + 1))
+fi
+CHECKS=$((CHECKS + 1))
 # pas. Une police non servie = retour silencieux a Roboto, c'est-a-dire un
 # webmail qui ne ressemble plus au site. On les controle donc explicitement.
 echo "    -- audit des polices declarees dans meteo.css --"

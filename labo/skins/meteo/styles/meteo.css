@@ -398,14 +398,16 @@ input[type="radio"]:checked {
 	background-color: var(--meteo-surface-alt);
 }
 
-.messagelist tr.selected td,
-.messagelist tr.unread td {
+.messagelist tr.selected td {
 	color: var(--meteo-ink);
 }
 
+/* Non-lus : gras et noir, comme Gmail. */
+.messagelist tr.unread td,
 .messagelist tr.unread td.subject a,
 .messagelist tr.unread td.from,
 .messagelist tr.unread td.date {
+	color: #111 !important;
 	font-weight: 700;
 }
 
@@ -1004,7 +1006,7 @@ body.task-mail:not(.action-compose) #layout-list {
 .meteo-tile-count {
 	margin-left: auto;
 	padding: 0 .45rem;
-	background-color: var(--meteo-teal);
+	background-color: var(--meteo-error);
 	color: #fff;
 	border-radius: 999px;
 	font-size: .68rem;
@@ -1545,6 +1547,38 @@ body.action-compose #composebody {
 	background: #fff;
 }
 
+/* Destinataire (A, Cc, Cci) : un seul cadre, celui du groupe. L'input
+   interne dessinait un second liseré (et un halo au focus) qui debordait
+   du cadre arrondi : on ne garde que le cadre du groupe, teinte quand le
+   champ a le focus. Le texte est recentre verticalement dans la barre. */
+body.action-compose ul.recipient-input {
+	align-items: center;
+	min-height: 38px;
+	padding: 0 .4rem !important;
+	box-shadow: none;
+}
+
+body.action-compose ul.recipient-input:focus-within {
+	border-color: var(--meteo-teal) !important;
+}
+
+body.action-compose ul.recipient-input li.input {
+	height: 34px;
+	margin: 0;
+}
+
+body.action-compose ul.recipient-input li.input input {
+	height: 34px !important;
+	line-height: 34px !important;
+	margin: 0 !important;
+	padding: 0 .3rem !important;
+	border: 0 !important;
+	border-radius: 0;
+	box-shadow: none !important;
+	outline: none;
+	background: transparent;
+}
+
 /* Envoyer : pastille teal (action principale) */
 body.action-compose .formbuttons .btn-primary.send {
 	background: var(--meteo-teal);
@@ -1597,4 +1631,244 @@ body.action-compose .formbuttons {
    doit jamais intercepter les evenements de pointeur. */
 div.iframe-dragdrop-fix {
 	pointer-events: none !important;
+}
+
+/* --------------------------------------------------------------------------
+   Structure des echanges facon messagerie (Messenger / WhatsApp) :
+   le message precedent (citation) reste neutre, en bulle grise a gauche ;
+   la reponse de l'utilisateur est une bulle verte a droite, espacee comme
+   dans une conversation. Les citations imbriquees restent sobres.
+   -------------------------------------------------------------------------- */
+body.task-mail.action-show blockquote[type="cite"] {
+	margin: .55rem auto .55rem 0 !important;
+	max-width: 72% !important;
+	padding: .6rem .85rem !important;
+	border: 0 !important;
+	border-radius: 14px 14px 14px 4px !important;
+	background-color: #f1f3f5 !important;
+	color: var(--meteo-ink, #2c363a);
+}
+
+body.task-mail.action-show blockquote[type="cite"] blockquote[type="cite"] {
+	margin-left: 0 !important;
+	border-radius: 12px !important;
+	background-color: #e9ecef !important;
+	color: var(--meteo-ink, #2c363a);
+}
+
+body.task-mail.action-show .meteo-reply-part {
+	margin: .55rem 0 .55rem auto !important;
+	max-width: 72% !important;
+	padding: .6rem .85rem !important;
+	border: 0 !important;
+	border-radius: 14px 14px 4px 14px !important;
+	background-color: #dcf8c6 !important;
+	color: var(--meteo-ink, #2c363a);
+	box-shadow: 0 1px 2px rgba(0, 0, 0, .08);
+}
+
+/* Boite de reception : l'expediteur (message recu) reste neutre a gauche,
+   la citation (nos propres messages) devient la bulle verte a droite. */
+html.meteo-incoming-view body.task-mail.action-show blockquote[type="cite"] {
+	margin: .55rem 0 .55rem auto !important;
+	border-radius: 14px 14px 4px 14px !important;
+	background-color: #dcf8c6 !important;
+	color: var(--meteo-ink, #2c363a);
+}
+
+html.meteo-incoming-view body.task-mail.action-show blockquote[type="cite"] blockquote[type="cite"] {
+	margin-left: auto !important;
+	border-radius: 12px !important;
+	background-color: #cfeea8 !important;
+}
+
+html.meteo-incoming-view body.task-mail.action-show .meteo-reply-part {
+	margin: .55rem auto .55rem 0 !important;
+	border-radius: 14px 14px 14px 4px !important;
+	background-color: #f1f3f5 !important;
+	box-shadow: none;
+}
+
+/* --- accueil des parametres et annuaire des agents ---------------------- */
+
+#meteo-settings-home,
+#meteo-agents-panel {
+	position: fixed;
+	left: 0;
+	right: 0;
+	top: 35px;
+	bottom: 0;
+	z-index: 30;
+	background-color: var(--meteo-canvas);
+	overflow: auto;
+}
+
+.meteo-home-inner,
+.meteo-agents-inner {
+	max-width: 1040px;
+	margin: 0 auto;
+	padding: 1.6rem 1.2rem 3rem;
+}
+
+.meteo-home-title {
+	margin: 0;
+	font-size: 1.55rem;
+	font-weight: 700;
+	color: var(--meteo-ink);
+}
+
+.meteo-home-lead {
+	margin: .35rem 0 0;
+	color: var(--meteo-muted);
+	font-size: .9rem;
+	line-height: 1.45;
+}
+
+.meteo-home-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+	gap: .8rem;
+	margin-top: 1.3rem;
+}
+
+.meteo-setting-card {
+	display: block;
+	padding: 1rem 1.1rem;
+	background-color: var(--meteo-surface);
+	border: 1px solid var(--meteo-hairline);
+	border-left: 3px solid var(--meteo-teal);
+	border-radius: 10px;
+	box-shadow: var(--meteo-shadow);
+	text-decoration: none !important;
+	transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+}
+
+.meteo-setting-card:hover,
+.meteo-setting-card:focus {
+	transform: translateY(-1px);
+	box-shadow: var(--meteo-shadow-lg);
+	border-color: var(--meteo-teal);
+	outline: none;
+}
+
+.meteo-setting-title {
+	display: block;
+	color: var(--meteo-ink);
+	font-weight: 700;
+	font-size: 1rem;
+}
+
+.meteo-setting-desc {
+	display: block;
+	margin-top: .25rem;
+	color: var(--meteo-muted);
+	font-size: .82rem;
+	line-height: 1.4;
+}
+
+.meteo-agent-search {
+	display: block;
+	width: 100%;
+	height: 42px;
+	margin-top: 1.1rem;
+	padding: 0 .95rem;
+	background-color: var(--meteo-surface);
+	border: 1px solid var(--meteo-field);
+	border-radius: 8px;
+	color: var(--meteo-ink);
+	font-size: .95rem;
+}
+
+.meteo-agent-search:focus {
+	border-color: var(--meteo-teal);
+	box-shadow: 0 0 0 2px rgba(23, 147, 138, .18);
+	outline: none;
+}
+
+.meteo-agent-list {
+	list-style: none;
+	margin: .6rem 0 0;
+	padding: 0;
+	display: grid;
+	gap: .45rem;
+}
+
+.meteo-agent {
+	display: flex;
+	align-items: center;
+	gap: .75rem;
+	padding: .55rem .75rem;
+	background-color: var(--meteo-surface);
+	border: 1px solid var(--meteo-hairline);
+	border-radius: 10px;
+}
+
+.meteo-agent-avatar {
+	width: 36px;
+	height: 36px;
+	flex: 0 0 auto;
+	border-radius: 50%;
+	background-color: var(--meteo-teal);
+	color: #fff;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-weight: 700;
+	font-size: .95rem;
+}
+
+.meteo-agent-id {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.meteo-agent-name {
+	display: block;
+	color: var(--meteo-ink);
+	font-weight: 600;
+	font-size: .92rem;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.meteo-agent-mail {
+	display: block;
+	color: var(--meteo-muted);
+	font-size: .8rem;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.meteo-agent-write {
+	flex: 0 0 auto;
+	padding: .4rem .9rem;
+	background-color: var(--meteo-teal);
+	border-radius: 999px;
+	color: #fff !important;
+	font-size: .8rem;
+	font-weight: 700;
+	text-decoration: none !important;
+}
+
+.meteo-agent-write:hover,
+.meteo-agent-write:focus {
+	background-color: var(--meteo-teal-deep);
+}
+
+.meteo-agent-empty {
+	padding: 1.2rem 0;
+	color: var(--meteo-muted);
+	font-size: .9rem;
+}
+
+@media (max-width: 640px) {
+	.meteo-home-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.meteo-agent-write {
+		padding: .4rem .7rem;
+	}
 }
