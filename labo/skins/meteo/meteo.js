@@ -261,6 +261,9 @@
                 }
             });
             composeObserver.observe(doc.body, { childList: true, subtree: true });
+            window.setTimeout(function () { injectSignature(composeFrame); }, 700);
+            window.setTimeout(function () { injectSignature(composeFrame); }, 1600);
+            window.setTimeout(function () { injectSignature(composeFrame); }, 3400);
         };
         composeFrame.addEventListener('load', attach);
         attach();
@@ -618,16 +621,141 @@
        Accueil des parametres, facon Gmail : des cartes simples.
        ------------------------------------------------------------------ */
 
-    var SETTINGS_SECTIONS = [
-        { id: 'general', title: 'Interface', desc: 'Langue, apparence et affichage general.' },
-        { id: 'mailbox', title: 'Boite de reception', desc: 'Nombre de lignes et tri des messages.' },
-        { id: 'mailview', title: 'Lecture des messages', desc: 'Images, HTML et apercu des courriels.' },
-        { id: 'compose', title: 'Redaction', desc: 'Signature, reponses et confirmation d envoi.' },
-        { id: 'addressbook', title: 'Contacts', desc: 'Carnet d adresses et listes de diffusion.' },
-        { id: 'folders', title: 'Dossiers', desc: 'Corbeille, envoyes et indesirables.' },
-        { id: 'server', title: 'Serveur', desc: 'Envoi et parametres du serveur de courriel.' },
-        { id: 'encryption', title: 'Securite', desc: 'Chiffrement et signature des messages.' }
-    ];
+    var COLOR_COOKIE = 'colorMode';
+    var SIGNATURE_KEY = 'meteo_signature';
+
+    /* Mode sombre : meme convention qu'Elastic (cookie « colorMode » et
+       classe « dark-mode » sur <html>), appliquee aussi aux cadres. */
+
+    function readColorMode() {
+        try {
+            if (window.rcmail && typeof rcmail.get_cookie === 'function') {
+                var v = rcmail.get_cookie(COLOR_COOKIE);
+                if (v) {
+                    return v;
+                }
+            }
+        } catch (e) { /* cookie indisponible */ }
+        var m = /(?:^|;\s*)colorMode=([^;]+)/.exec(document.cookie);
+        return m ? decodeURIComponent(m[1]) : '';
+    }
+
+    function writeColorMode(mode) {
+        try {
+            if (window.rcmail && typeof rcmail.set_cookie === 'function') {
+                rcmail.set_cookie(COLOR_COOKIE, mode, false);
+                return;
+            }
+        } catch (e) { /* cookie indisponible */ }
+        document.cookie = COLOR_COOKIE + '=' + mode + '; path=/; max-age=31536000';
+    }
+
+    function paintFrame(frame) {
+        try {
+            var doc = frame.contentDocument;
+            if (!doc || !doc.documentElement) {
+                return;
+            }
+            if (document.documentElement.classList.contains('dark-mode')) {
+                doc.documentElement.classList.add('dark-mode');
+            } else {
+                doc.documentElement.classList.remove('dark-mode');
+            }
+        } catch (e) { /* cadre inaccessible */ }
+    }
+
+    function paintFrames() {
+        var frames = document.querySelectorAll('iframe');
+        for (var i = 0; i < frames.length; i++) {
+            paintFrame(frames[i]);
+        }
+    }
+
+    function applyColorMode(mode) {
+        if (mode === 'dark') {
+            document.documentElement.classList.add('dark-mode');
+        } else {
+            document.documentElement.classList.remove('dark-mode');
+        }
+        paintFrames();
+        var sw = byId('meteo-switch-dark');
+        if (sw) {
+            if (mode === 'dark') {
+                sw.classList.add('on');
+            } else {
+                sw.classList.remove('on');
+            }
+            sw.setAttribute('aria-checked', mode === 'dark' ? 'true' : 'false');
+        }
+    }
+
+    function toggleColorMode() {
+        var dark = document.documentElement.classList.contains('dark-mode');
+        var mode = dark ? 'light' : 'dark';
+        applyColorMode(mode);
+        writeColorMode(mode);
+    }
+
+    function initColorMode() {
+        if (window.rcmail && rcmail.env && rcmail.env.action === 'print') {
+            return;
+        }
+        var pref = readColorMode();
+        var mode = pref || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+            ? 'dark' : 'light');
+        applyColorMode(mode);
+        var frames = document.querySelectorAll('iframe');
+        for (var i = 0; i < frames.length; i++) {
+            (function (frame) {
+                frame.addEventListener('load', function () { paintFrame(frame); });
+            })(frames[i]);
+        }
+        window.setTimeout(paintFrames, 1500);
+        window.setTimeout(paintFrames, 4000);
+    }
+
+    /* Signature : un texte simple, ajoute au bas de chaque message.
+       Enregistree dans le navigateur et posee dans l'editeur. */
+
+    function getSignature() {
+        try {
+            return window.localStorage.getItem(SIGNATURE_KEY) || '';
+        } catch (e) {
+            return '';
+        }
+    }
+
+    function saveSignature(text) {
+        try {
+            if (text) {
+                window.localStorage.setItem(SIGNATURE_KEY, text);
+            } else {
+                window.localStorage.removeItem(SIGNATURE_KEY);
+            }
+        } catch (e) { /* stockage indisponible */ }
+    }
+
+    function injectSignature(frame) {
+        var sig = getSignature();
+        if (!sig || !frame) {
+            return;
+        }
+        try {
+            var doc = frame.contentDocument;
+            if (!doc) {
+                return;
+            }
+            var tester = doc.getElementById('composebody_ifr');
+            var edoc = tester && tester.contentDocument;
+            if (!edoc || !edoc.body || edoc.querySelector('.meteo-signature')) {
+                return;
+            }
+            var wrap = edoc.createElement('div');
+            wrap.className = 'meteo-signature';
+            wrap.textContent = sig;
+            edoc.body.appendChild(wrap);
+        } catch (e) { /* editeur indisponible */ }
+    }
 
     function esc(text) {
         return String(text == null ? '' : text)
@@ -651,27 +779,115 @@
         window.addEventListener('resize', place);
     }
 
+    /* Accueil simplifie : seuls les reglages utiles, actionnables ici.
+       Le reste de Roundcube reste joignable par « Options avancees ». */
+
     function settingsHome() {
         if (byId('meteo-settings-home')) {
             return;
         }
-        var cards = SETTINGS_SECTIONS.map(function (section) {
-            return '<a class="meteo-setting-card" href="./?_task=settings&amp;_action=preferences&amp;_section=' + section.id + '">'
-                + '<span class="meteo-setting-title">' + esc(section.title) + '</span>'
-                + '<span class="meteo-setting-desc">' + esc(section.desc) + '</span>'
-                + '</a>';
-        }).join('');
         var home = document.createElement('section');
         home.id = 'meteo-settings-home';
         home.setAttribute('aria-label', 'Parametres');
         home.innerHTML =
-            '<div class="meteo-home-inner">'
+            '<div class="meteo-home-inner" id="meteo-home-main">'
             + '<h1 class="meteo-home-title">Parametres</h1>'
-            + '<p class="meteo-home-lead">Reglez ici les usages courants. Chaque carte ouvre une page simple.</p>'
-            + '<nav class="meteo-home-grid" aria-label="Sections des parametres">' + cards + '</nav>'
+            + '<p class="meteo-home-lead">Les reglages utiles au quotidien, rien de plus.</p>'
+            + '<div class="meteo-home-grid">'
+            + '<button type="button" class="meteo-setting-card" data-meteo-set="dark">'
+            + '<span class="meteo-setting-title">Mode sombre</span>'
+            + '<span class="meteo-setting-desc">Basculer l ecran entre clair et sombre, comme sur une application.</span>'
+            + '<span class="meteo-switch" id="meteo-switch-dark" role="switch" aria-checked="false" aria-label="Mode sombre"></span>'
+            + '</button>'
+            + '<button type="button" class="meteo-setting-card" data-meteo-set="signature">'
+            + '<span class="meteo-setting-title">Ma signature</span>'
+            + '<span class="meteo-setting-desc">Le texte ajoute automatiquement au bas de vos messages.</span>'
+            + '</button>'
+            + '<button type="button" class="meteo-setting-card" data-meteo-set="guide">'
+            + '<span class="meteo-setting-title">Comment utiliser la messagerie</span>'
+            + '<span class="meteo-setting-desc">Lire, ecrire, retrouver et ranger vos messages en quelques gestes.</span>'
+            + '</button>'
+            + '</div>'
+            + '<p class="meteo-home-advanced"><a href="./?_task=settings&amp;_action=preferences">Options avancees</a></p>'
+            + '</div>'
+            + '<div class="meteo-home-inner" id="meteo-home-signature" hidden>'
+            + '<button type="button" class="meteo-back" data-meteo-back="1">&#8592; Retour</button>'
+            + '<h1 class="meteo-home-title">Ma signature</h1>'
+            + '<p class="meteo-home-lead">Elle est ajoutee au bas de chaque nouveau message.</p>'
+            + '<textarea id="meteo-sign-text" class="meteo-sign-text" rows="6" placeholder="Exemple : Rasoa Andria, Station meteo Ivato"></textarea>'
+            + '<div class="meteo-sign-actions">'
+            + '<button type="button" class="meteo-btn" id="meteo-sign-save">Enregistrer</button>'
+            + '<span id="meteo-sign-status" class="meteo-sign-status"></span>'
+            + '</div>'
+            + '</div>'
+            + '<div class="meteo-home-inner" id="meteo-home-guide" hidden>'
+            + '<button type="button" class="meteo-back" data-meteo-back="1">&#8592; Retour</button>'
+            + '<h1 class="meteo-home-title">Comment utiliser la messagerie</h1>'
+            + '<ul class="meteo-guide-list">'
+            + '<li><strong>Lire un message</strong> : cliquez sur sa ligne dans la liste, il s ouvre au-dessus.</li>'
+            + '<li><strong>Ecrire</strong> : bouton jaune « Ecrire un message », en haut de la boite.</li>'
+            + '<li><strong>Tous les messages</strong> : le bouton en haut regroupe recus et envoyes.</li>'
+            + '<li><strong>Repondre</strong> : ouvrez un message puis « Repondre » ; vos messages apparaissent en bulle verte.</li>'
+            + '<li><strong>Corbeille</strong> : « Restaurer » remet le message en boite, « Supprimer definitivement » l efface.</li>'
+            + '<li><strong>Contacts</strong> : onglet « Mes contacts », cherchez un agent puis « Ecrire ».</li>'
+            + '<li><strong>Mode sombre</strong> : la carte ci-dessus, effet immediat.</li>'
+            + '</ul>'
             + '</div>';
         document.body.appendChild(home);
         placeOverlay(home);
+        home.addEventListener('click', function (ev) {
+            if (ev.target.closest && ev.target.closest('[data-meteo-back]')) {
+                showHomeView('main');
+                return;
+            }
+            var card = ev.target.closest ? ev.target.closest('[data-meteo-set]') : null;
+            if (!card) {
+                return;
+            }
+            var key = card.getAttribute('data-meteo-set');
+            if (key === 'dark') {
+                toggleColorMode();
+            } else if (key === 'signature') {
+                openSignatureView();
+            } else if (key === 'guide') {
+                showHomeView('guide');
+            }
+        });
+        var save = byId('meteo-sign-save');
+        if (save) {
+            save.addEventListener('click', function () {
+                var field = byId('meteo-sign-text');
+                var text = field ? field.value.replace(/\r\n/g, '\n').trim() : '';
+                saveSignature(text);
+                var status = byId('meteo-sign-status');
+                if (status) {
+                    status.textContent = text ? 'Signature enregistree.' : 'Signature effacee.';
+                }
+            });
+        }
+        applyColorMode(document.documentElement.classList.contains('dark-mode') ? 'dark' : 'light');
+    }
+
+    function showHomeView(name) {
+        var views = { main: 'meteo-home-main', signature: 'meteo-home-signature', guide: 'meteo-home-guide' };
+        Object.keys(views).forEach(function (key) {
+            var el = byId(views[key]);
+            if (el) {
+                el.hidden = key !== name;
+            }
+        });
+    }
+
+    function openSignatureView() {
+        showHomeView('signature');
+        var field = byId('meteo-sign-text');
+        if (field) {
+            field.value = getSignature();
+        }
+        var status = byId('meteo-sign-status');
+        if (status) {
+            status.textContent = '';
+        }
     }
 
     /* Annuaire des agents : liste des boites du domaine, generee au
@@ -816,6 +1032,7 @@
 
     ready(function () {
         body = document.body;
+        initColorMode();
 
         /* La page unique ne concerne que la tache « mail ». La page de
            redaction (action-compose) a son propre gabarit : on n'y touche

@@ -1703,6 +1703,157 @@ html.meteo-incoming-view body.task-mail.action-show .meteo-reply-part {
 	overflow: auto;
 }
 
+.meteo-switch {
+	display: inline-block;
+	width: 44px;
+	height: 24px;
+	margin-top: .6rem;
+	border-radius: 999px;
+	background-color: #cfd6dc;
+	transition: background-color .15s ease;
+	position: relative;
+	vertical-align: middle;
+}
+
+.meteo-switch::after {
+	content: "";
+	position: absolute;
+	top: 2px;
+	left: 2px;
+	width: 20px;
+	height: 20px;
+	border-radius: 50%;
+	background-color: #fff;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, .25);
+	transition: transform .15s ease;
+}
+
+.meteo-switch.on {
+	background-color: var(--meteo-teal);
+}
+
+.meteo-switch.on::after {
+	transform: translateX(20px);
+}
+
+html.dark-mode .meteo-switch {
+	background-color: #4a4a4a;
+}
+
+.meteo-home-advanced {
+	margin: 1.3rem 0 0;
+	font-size: .85rem;
+}
+
+.meteo-home-advanced a {
+	color: var(--meteo-muted);
+	text-decoration: underline;
+}
+
+.meteo-back {
+	display: inline-block;
+	margin-bottom: .8rem;
+	padding: .35rem .7rem;
+	font: inherit;
+	font-size: .85rem;
+	color: var(--meteo-teal);
+	background: none;
+	border: 1px solid var(--meteo-hairline);
+	border-radius: 8px;
+	cursor: pointer;
+}
+
+.meteo-sign-text {
+	width: 100%;
+	max-width: 640px;
+	min-height: 140px;
+	padding: .7rem .8rem;
+	font: inherit;
+	color: var(--meteo-ink);
+	background-color: var(--meteo-surface);
+	border: 1px solid var(--meteo-field);
+	border-radius: 8px;
+	resize: vertical;
+}
+
+.meteo-sign-text:focus {
+	border-color: var(--meteo-teal);
+	outline: none;
+}
+
+.meteo-sign-actions {
+	display: flex;
+	align-items: center;
+	gap: .8rem;
+	margin-top: .8rem;
+}
+
+.meteo-sign-status {
+	font-size: .85rem;
+	color: var(--meteo-success);
+}
+
+.meteo-guide-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	gap: .5rem;
+	max-width: 760px;
+}
+
+.meteo-guide-list li {
+	padding: .65rem .85rem;
+	background-color: var(--meteo-surface);
+	border: 1px solid var(--meteo-hairline);
+	border-radius: 10px;
+	font-size: .9rem;
+	color: var(--meteo-body);
+}
+
+.meteo-guide-list strong {
+	color: var(--meteo-ink);
+}
+
+/* Signature dans l'editeur de redaction */
+.meteo-signature {
+	margin-top: 1.1rem;
+	padding-top: .6rem;
+	border-top: 1px solid #d9e1e4;
+	white-space: pre-line;
+	color: #5a5a5a;
+}
+
+html.dark-mode .meteo-signature {
+	border-top-color: #3a3a3a;
+	color: #c9c9c9;
+}
+
+/* Bulles de conversation en mode sombre */
+html.dark-mode body.task-mail.action-show blockquote[type="cite"] {
+	background-color: #2c2c2c !important;
+	color: #e6e6e6;
+}
+
+html.dark-mode body.task-mail.action-show .meteo-reply-part {
+	background-color: #1f5b33 !important;
+	color: #eafbef;
+	box-shadow: none;
+}
+
+/* Vue recue : la citation (message precedent) est verte a droite,
+   la reponse neutre a gauche ; memes teintes en mode sombre. */
+html.meteo-incoming-view.dark-mode body.task-mail.action-show blockquote[type="cite"] {
+	background-color: #1f5b33 !important;
+	color: #eafbef;
+}
+
+html.meteo-incoming-view.dark-mode body.task-mail.action-show .meteo-reply-part {
+	background-color: #2c2c2c !important;
+	color: #e6e6e6;
+	box-shadow: none;
+}
+
 .meteo-home-inner,
 .meteo-agents-inner {
 	max-width: 1040px;
@@ -1749,6 +1900,13 @@ html.meteo-incoming-view body.task-mail.action-show .meteo-reply-part {
 	box-shadow: var(--meteo-shadow-lg);
 	border-color: var(--meteo-teal);
 	outline: none;
+}
+
+button.meteo-setting-card {
+	width: 100%;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
 }
 
 .meteo-setting-title {
