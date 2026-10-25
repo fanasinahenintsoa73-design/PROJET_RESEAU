@@ -226,27 +226,40 @@ a:focus {
 
 .btn,
 button.btn,
-.btn-primary,
-.btn-secondary,
-a.btn {
-	background-color: var(--meteo-yellow) !important;
+a.btn,
+.btn-secondary {
+	background-color: var(--meteo-surface) !important;
 	color: var(--meteo-ink) !important;
-	border: none !important;
+	border: 1px solid var(--meteo-field) !important;
 	border-radius: var(--meteo-radius) !important;
-	font-weight: 600;
-	text-transform: uppercase;
-	letter-spacing: .02em;
-	padding: 7px 16px !important;
+	font-weight: 500;
+	padding: 6px 12px !important;
 	box-shadow: none !important;
-	transition: background-color .15s ease;
+	transition: background-color .15s ease, border-color .15s ease;
 }
 
 .btn:hover,
 .btn:focus,
 button.btn:hover,
-.btn-primary:hover,
 .btn-secondary:hover {
+	background-color: var(--meteo-surface-alt) !important;
+	border-color: var(--meteo-teal) !important;
+	color: var(--meteo-ink) !important;
+}
+
+.btn-primary,
+button.btn-primary {
+	background-color: var(--meteo-yellow) !important;
+	border-color: var(--meteo-yellow-deep) !important;
+	color: var(--meteo-ink) !important;
+	font-weight: 600;
+}
+
+.btn-primary:hover,
+.btn-primary:focus,
+button.btn-primary:hover {
 	background-color: var(--meteo-yellow-deep) !important;
+	border-color: var(--meteo-yellow-deep) !important;
 	color: var(--meteo-ink) !important;
 }
 
@@ -509,80 +522,43 @@ input[type="radio"]:checked {
 	background-color: var(--meteo-canvas);
 }
 
-/* Grille de tuiles : 2 colonnes, tient dans la colonne de 300 px minimum. */
-.meteo-tiles {
-	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	gap: .5rem;
-}
-
-.meteo-tile {
-	display: flex !important;
+/* Bouton d'ecriture : la seule action principale de la boite. */
+.meteo-compose-btn {
+	display: inline-flex;
 	align-items: center;
 	gap: .5rem;
-	padding: .6rem .55rem;
-	background-color: var(--meteo-surface);
-	border: 1px solid var(--meteo-hairline);
-	border-left: 3px solid var(--meteo-teal);
-	border-radius: var(--meteo-radius);
-	box-shadow: var(--meteo-shadow);
+	padding: .55rem 1.1rem;
+	background-color: var(--meteo-yellow);
+	border: 1px solid var(--meteo-yellow-deep);
+	border-radius: 999px;
 	color: var(--meteo-ink) !important;
 	text-decoration: none !important;
 	font-weight: 600;
-	font-size: .78rem;
+	font-size: .9rem;
 	line-height: 1.25;
-	transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+	transition: background-color .15s ease, border-color .15s ease;
 }
 
-.meteo-tile:hover,
-.meteo-tile:focus {
-	transform: translateY(-1px);
-	box-shadow: var(--meteo-shadow-lg);
-	border-color: var(--meteo-teal);
-	border-left-color: var(--meteo-teal-deep);
-	color: var(--meteo-teal) !important;
+.meteo-compose-btn:hover,
+.meteo-compose-btn:focus {
+	background-color: var(--meteo-yellow-deep);
+	border-color: var(--meteo-yellow-deep);
 	outline: none;
 }
 
-.meteo-tile:active {
-	transform: translateY(0);
-}
-
-.meteo-tile svg {
-	width: 1.35rem;
-	height: 1.35rem;
+.meteo-compose-btn svg {
+	width: 1.15rem;
+	height: 1.15rem;
 	flex: 0 0 auto;
 	fill: none;
-	stroke: var(--meteo-teal);
+	stroke: currentColor;
 	stroke-width: 1.7;
 	stroke-linecap: round;
 	stroke-linejoin: round;
 }
 
-.meteo-tile > span.inner,
-.meteo-tile > span {
+.meteo-compose-btn > span.inner {
 	display: block;
-}
-
-/* Action principale : le bouton jaune du site. */
-.meteo-tile-primary {
-	background-color: var(--meteo-yellow) !important;
-	border-color: var(--meteo-yellow) !important;
-	border-left-color: var(--meteo-ink) !important;
-	color: var(--meteo-ink) !important;
-	text-transform: uppercase;
-	letter-spacing: .02em;
-}
-
-.meteo-tile-primary svg {
-	stroke: var(--meteo-ink);
-}
-
-.meteo-tile-primary:hover,
-.meteo-tile-primary:focus {
-	background-color: var(--meteo-yellow-deep) !important;
-	border-color: var(--meteo-yellow-deep) !important;
-	color: var(--meteo-ink) !important;
 }
 
 /* Raccourcis de second niveau : pilules discretes. */
@@ -732,11 +708,6 @@ input[type="radio"]:checked {
 	background-color: var(--meteo-surface) !important;
 }
 
-.dark-mode .meteo-tile {
-	background-color: var(--meteo-surface-alt);
-	color: var(--meteo-ink) !important;
-}
-
 .dark-mode .meteo-shortcuts a {
 	background-color: var(--meteo-surface-alt);
 	color: var(--meteo-teal);
@@ -747,21 +718,13 @@ input[type="radio"]:checked {
    -------------------------------------------------------------------------- */
 
 @media screen and (max-width: 575.98px) {
-	.meteo-tiles {
-		grid-template-columns: 1fr;
-	}
-
-	.meteo-tile {
-		padding: .7rem;
-	}
-
 	/* Cibles tactiles de 44 px minimum sur poste regional ou telephone. */
 	.btn,
 	button.btn {
 		min-height: 44px;
 	}
 
-	.meteo-tile {
+	.meteo-compose-btn {
 		min-height: 44px;
 	}
 
@@ -775,14 +738,8 @@ input[type="radio"]:checked {
 }
 
 @media screen and (min-width: 576px) and (max-width: 767.98px) {
-	.meteo-tiles {
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-	}
-}
-
-@media screen and (min-width: 768px) and (max-width: 991.98px) {
-	.meteo-tile {
-		padding: .65rem;
+	#meteo-actions {
+		padding: .6rem .9rem;
 	}
 }
 
@@ -985,33 +942,11 @@ body.task-mail:not(.action-compose) #layout-list {
 
 #meteo-actions {
 	display: flex;
+	align-items: center;
 	gap: .5rem;
 	padding: .6rem .9rem;
 	background-color: var(--meteo-canvas);
 	border-bottom: 1px solid var(--meteo-hairline);
-}
-
-#meteo-actions .meteo-tile {
-	flex: 1 1 0;
-	max-width: 320px;
-	padding: .7rem .85rem;
-	font-size: .85rem;
-}
-
-#meteo-actions .meteo-tile svg {
-	width: 1.5rem;
-	height: 1.5rem;
-}
-
-.meteo-tile-count {
-	margin-left: auto;
-	padding: 0 .45rem;
-	background-color: var(--meteo-error);
-	color: #fff;
-	border-radius: 999px;
-	font-size: .68rem;
-	font-weight: 700;
-	line-height: 1.5;
 }
 
 /* --- panneau lateral ---------------------------------------------------- */
@@ -1034,10 +969,8 @@ body.task-mail:not(.action-compose) #layout-list {
 .meteo-side-title {
 	margin: 1rem .2rem .4rem;
 	color: var(--meteo-muted);
-	font-size: .66rem;
-	font-weight: 700;
-	text-transform: uppercase;
-	letter-spacing: .09em;
+	font-size: .72rem;
+	font-weight: 600;
 }
 
 .meteo-side-scroll > .meteo-side-title:first-child {
@@ -1072,7 +1005,6 @@ body.task-mail:not(.action-compose) #layout-list {
 	background-color: rgba(23, 147, 138, .09);
 	color: var(--meteo-teal);
 	font-weight: 600;
-	box-shadow: inset 3px 0 0 var(--meteo-teal);
 }
 
 #meteo-folders .unreadcount {
@@ -1155,15 +1087,27 @@ body.task-mail:not(.action-compose) #messagelist-header {
 	display: block;
 	flex: 0 1 auto;
 	min-width: 0;
-	margin-right: auto;
+	margin-right: .7rem;
 	color: var(--meteo-ink);
-	font-size: .92rem;
-	font-weight: 700;
-	text-transform: uppercase;
-	letter-spacing: .02em;
+	font-size: .95rem;
+	font-weight: 600;
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
+}
+
+.meteo-all-link {
+	flex: 0 0 auto;
+	margin-right: auto;
+	color: var(--meteo-muted);
+	font-size: .82rem;
+	text-decoration: none;
+}
+
+.meteo-all-link:hover,
+.meteo-all-link:focus {
+	color: var(--meteo-teal);
+	text-decoration: underline;
 }
 
 body.task-mail:not(.action-compose) #messagelist-content {
@@ -1183,10 +1127,8 @@ body.task-mail:not(.action-compose) #messagelist-content {
 	background: none;
 	color: var(--meteo-body);
 	font-family: inherit;
-	font-size: .72rem;
-	font-weight: 600;
-	text-transform: uppercase;
-	letter-spacing: .02em;
+	font-size: .82rem;
+	font-weight: 500;
 	cursor: pointer;
 }
 
@@ -1243,41 +1185,79 @@ html:not(.iframe) body.task-mail:not(.action-compose) #layout-content .header {
 .meteo-read-bar {
 	display: flex;
 	align-items: center;
-	gap: .6rem;
-	padding: .5rem .9rem;
-	background-color: var(--meteo-navy);
-	color: #fff;
+	gap: .35rem;
+	padding: .45rem .65rem;
+	background-color: var(--meteo-surface);
+	border-bottom: 1px solid var(--meteo-hairline);
+	color: var(--meteo-ink);
 }
 
 .meteo-read-title {
-	flex: 1 1 auto;
-	min-width: 0;
-	overflow: hidden;
-	white-space: nowrap;
-	text-overflow: ellipsis;
-	font-size: .85rem;
-	font-weight: 600;
+	display: none;
 }
 
 .meteo-read-actions {
 	display: flex;
-	gap: .35rem;
+	gap: .15rem;
+	margin-left: auto;
 }
 
 .meteo-read-actions [hidden] {
 	display: none;
 }
 
-.meteo-read-bar .meteo-btn {
-	background-color: transparent;
-	border-color: rgba(255, 255, 255, .45);
-	color: #fff;
+.meteo-iconbtn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 36px;
+	height: 36px;
+	flex: 0 0 auto;
+	padding: 0;
+	border: 0;
+	border-radius: 8px;
+	background: none;
+	color: var(--meteo-body);
+	cursor: pointer;
+	text-decoration: none;
 }
 
-.meteo-read-bar .meteo-btn:hover {
-	background-color: rgba(255, 255, 255, .12);
-	border-color: #fff;
-	color: #fff;
+.meteo-iconbtn:hover {
+	background-color: var(--meteo-surface-alt);
+	color: var(--meteo-ink);
+}
+
+.meteo-iconbtn:focus-visible {
+	outline: 2px solid var(--meteo-teal);
+	outline-offset: 1px;
+}
+
+.meteo-iconbtn svg {
+	width: 20px;
+	height: 20px;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 1.7;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+
+.meteo-iconbtn[hidden] {
+	display: none;
+}
+
+/* Roundcube ajoute « btn btn-secondary » aux <button> : on garde la
+   forme icone, sans fond jaune ni casse de bouton. */
+.meteo-iconbtn.btn,
+.meteo-iconbtn.btn-secondary {
+	background: none !important;
+	border: 0 !important;
+	padding: 0 !important;
+	min-height: 0 !important;
+	border-radius: 8px !important;
+	color: var(--meteo-body) !important;
+	text-transform: none !important;
+	letter-spacing: 0 !important;
 }
 
 .meteo-read-frame {
@@ -1306,29 +1286,20 @@ html:not(.iframe) body.task-mail:not(.action-compose) #layout-content .header {
 	display: flex;
 	align-items: center;
 	gap: .6rem;
-	padding: .5rem .9rem;
-	background-color: var(--meteo-navy);
-	color: #fff;
+	padding: .45rem .65rem;
+	background-color: var(--meteo-surface);
+	border-bottom: 1px solid var(--meteo-hairline);
+	color: var(--meteo-ink);
 }
 
 .meteo-compose-title {
-	font-size: .78rem;
-	font-weight: 700;
-	text-transform: uppercase;
-	letter-spacing: .05em;
+	flex: 1 1 auto;
+	font-size: .95rem;
+	font-weight: 600;
 }
 
-.meteo-compose-bar .meteo-btn {
+.meteo-compose-bar .meteo-iconbtn {
 	margin-left: auto;
-	background-color: transparent;
-	border-color: rgba(255, 255, 255, .45);
-	color: #fff;
-}
-
-.meteo-compose-bar .meteo-btn:hover {
-	background-color: rgba(255, 255, 255, .12);
-	border-color: #fff;
-	color: #fff;
 }
 
 .meteo-compose-frame {
@@ -1379,22 +1350,23 @@ html:not(.iframe) body.task-mail:not(.action-compose) #layout-content .header {
 		font-size: .8rem;
 	}
 
-	/* Grille 2x2 : trois actions + le champ de recherche. */
+	/* Barre compacte : bouton d'ecriture + recherche. */
 	body.task-mail:not(.action-compose) #meteo-actions {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
+		display: flex;
+		align-items: center;
 		gap: .4rem;
 		padding: .5rem .6rem;
 	}
 
-	body.task-mail:not(.action-compose) #meteo-actions .meteo-tile {
-		max-width: none;
+	body.task-mail:not(.action-compose) #meteo-actions .meteo-compose-btn {
 		min-height: 44px;
 	}
 
 	.meteo-search-mobile {
 		display: block;
+		flex: 1 1 auto;
 		min-width: 0;
+		margin-left: auto;
 	}
 
 	.meteo-search-slot {
@@ -1930,18 +1902,16 @@ html.meteo-incoming-view.dark-mode body.task-mail.action-show .meteo-reply-part 
 	padding: 1rem 1.1rem;
 	background-color: var(--meteo-surface);
 	border: 1px solid var(--meteo-hairline);
-	border-left: 3px solid var(--meteo-teal);
-	border-radius: 10px;
-	box-shadow: var(--meteo-shadow);
+	border-radius: 12px;
+	box-shadow: none;
 	text-decoration: none !important;
-	transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+	transition: background-color .15s ease, border-color .15s ease;
 }
 
 .meteo-setting-card:hover,
 .meteo-setting-card:focus {
-	transform: translateY(-1px);
-	box-shadow: var(--meteo-shadow-lg);
-	border-color: var(--meteo-teal);
+	background-color: var(--meteo-surface-alt);
+	border-color: var(--meteo-field);
 	outline: none;
 }
 
@@ -2072,4 +2042,154 @@ button.meteo-setting-card {
 	.meteo-agent-write {
 		padding: .4rem .7rem;
 	}
+}
+
+/* --------------------------------------------------------------------------
+   En-tete du message facon Gmail / Proton : avatar, nom, adresse, date.
+   -------------------------------------------------------------------------- */
+
+#message-header h2.subject {
+	font-size: 1.35rem;
+	font-weight: 600;
+	line-height: 1.3;
+}
+
+#message-header .meteo-msg-head {
+	display: flex;
+	gap: .7rem;
+	align-items: flex-start;
+	padding: .2rem 0 .9rem;
+}
+
+#message-header .meteo-avatar {
+	width: 40px;
+	height: 40px;
+	flex: 0 0 auto;
+	border-radius: 50%;
+	background-color: var(--meteo-teal);
+	color: #fff;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: .85rem;
+	font-weight: 600;
+}
+
+#message-header .meteo-msg-meta {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+#message-header .meteo-msg-line {
+	display: flex;
+	align-items: baseline;
+	gap: .4rem;
+	flex-wrap: wrap;
+}
+
+#message-header .meteo-msg-name {
+	color: var(--meteo-ink);
+	font-weight: 600;
+	font-size: .95rem;
+}
+
+#message-header .meteo-msg-addr {
+	color: var(--meteo-muted);
+	font-size: .82rem;
+}
+
+#message-header .meteo-msg-date {
+	margin-left: auto;
+	color: var(--meteo-muted);
+	font-size: .8rem;
+}
+
+#message-header .meteo-msg-to {
+	margin-top: .15rem;
+	gap: .6rem;
+	color: var(--meteo-muted);
+	font-size: .82rem;
+}
+
+#message-header .meteo-msg-add {
+	color: var(--meteo-teal);
+	font-size: .82rem;
+	text-decoration: none;
+}
+
+#message-header .meteo-msg-add:hover {
+	text-decoration: underline;
+}
+
+/* Apercu de piece jointe image : l'image d'abord, la legende ensuite. */
+body.task-mail #messagebody p.image-attachment {
+	display: block !important;
+	width: auto !important;
+	max-width: 100% !important;
+	margin: .4rem 0 .8rem !important;
+	padding: 0 !important;
+	border: 0 !important;
+	background: none !important;
+}
+
+body.task-mail #messagebody p.image-attachment a.image-link {
+	display: block !important;
+	width: auto !important;
+	text-align: left !important;
+}
+
+body.task-mail #messagebody p.image-attachment img.image-thumbnail {
+	display: block;
+	width: auto !important;
+	max-width: 100% !important;
+	max-height: 420px !important;
+	border: 1px solid var(--meteo-hairline);
+	border-radius: 12px;
+	background: none !important;
+}
+
+body.task-mail #messagebody p.image-attachment span {
+	display: inline !important;
+	position: static !important;
+	float: none !important;
+	margin: 0 .55rem 0 0;
+	color: var(--meteo-muted);
+	font-size: .8rem;
+}
+
+body.task-mail #messagebody p.image-attachment span.attachment-links a {
+	color: var(--meteo-muted) !important;
+	margin-right: .55rem;
+	text-decoration: none;
+}
+
+body.task-mail #messagebody p.image-attachment span.attachment-links a:hover {
+	color: var(--meteo-teal) !important;
+	text-decoration: underline;
+}
+
+/* Le bouton flottant de Roundcube doublerait le bouton « Ecrire ». */
+.floating-action-buttons {
+	display: none !important;
+}
+
+/* Liens Details / En-tetes / Texte brut : texte seul, sans pastilles. */
+#message-header .header-links a::before {
+	content: none !important;
+}
+
+#message-header .header-links a {
+	color: var(--meteo-muted) !important;
+	font-size: .8rem;
+	text-decoration: none;
+}
+
+#message-header .header-links a:hover {
+	color: var(--meteo-teal) !important;
+	text-decoration: underline;
+}
+
+/* Dans l'overlay de redaction, le logo du menu des taches est inutile. */
+body.task-mail.action-compose #layout-menu .popover-header {
+	display: none !important;
 }

@@ -378,6 +378,7 @@
             title.textContent = subject || 'Message';
         }
         var params = queryParams(href);
+        window.__meteoReadMbox = params._mbox || '';
         /* Dans la corbeille, les actions de reponse n'ont pas de sens :
            on propose « Restaurer » (retour dans la boite de reception)
            et « Supprimer definitivement ». */
@@ -489,6 +490,126 @@
        suit est enveloppee et posee en retrait avec un liseré vert.
        ------------------------------------------------------------------ */
 
+    /* Si chaque piece jointe a deja son apercu dans le corps, la ligne
+       « pieces jointes » du haut serait un doublon : on la masque. */
+    function tidyAttachments(doc) {
+        var list = doc.getElementById('attachment-list');
+        if (!list) {
+            return;
+        }
+        var items = list.querySelectorAll('li');
+        var previews = doc.querySelectorAll('.image-attachment');
+        if (items.length && previews.length >= items.length) {
+            list.hidden = true;
+        }
+    }
+
+    /* En-tete du message facon Gmail/Proton : avatar, nom, adresse, date,
+       destinataire. Les liens Details / En-tetes / Texte brut restent. */
+
+    function agentDisplayName(email) {
+        var list = window.METEO_AGENTS || [];
+        var lower = String(email || '').toLowerCase();
+        for (var i = 0; i < list.length; i++) {
+            if (String(list[i].email || '').toLowerCase() === lower) {
+                return list[i].name || '';
+            }
+        }
+        var local = lower.replace(/@.*$/, '').replace(/[._-]+/g, ' ').trim();
+        var parts = local.split(/\s+/).map(function (piece) {
+            return piece.charAt(0).toUpperCase() + piece.slice(1);
+        });
+        return parts.join(' ');
+    }
+
+    function initialsOf(name) {
+        var parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+        var first = parts[0] ? parts[0].charAt(0) : '?';
+        var last = parts.length > 1 ? parts[parts.length - 1].charAt(0) : '';
+        return (first + last).toUpperCase();
+    }
+
+    function styleMessageHeader(doc) {
+        var header = doc.getElementById('message-header');
+        if (!header || header.querySelector('.meteo-msg-head')) {
+            return;
+        }
+        var summary = header.querySelector('.header-summary');
+        var content = header.querySelector('.header-content');
+        if (!summary || !content) {
+            return;
+        }
+        var fromLink = summary.querySelector('a.rcmContactAddress');
+        var fromAddr = fromLink ? (fromLink.getAttribute('href') || '').replace(/^mailto:/i, '') : '';
+        var dateEl = summary.querySelector('.text-nowrap');
+        var dateText = dateEl ? dateEl.textContent.trim() : '';
+        var name = agentDisplayName(fromAddr) || fromAddr;
+
+        var box = doc.createElement('div');
+        box.className = 'meteo-msg-head';
+
+        var avatar = doc.createElement('span');
+        avatar.className = 'meteo-avatar';
+        avatar.textContent = initialsOf(name);
+
+        var meta = doc.createElement('div');
+        meta.className = 'meteo-msg-meta';
+
+        var line = doc.createElement('div');
+        line.className = 'meteo-msg-line';
+
+        var strong = doc.createElement('span');
+        strong.className = 'meteo-msg-name';
+        strong.textContent = name;
+        line.appendChild(strong);
+
+        if (fromAddr) {
+            var addr = doc.createElement('span');
+            addr.className = 'meteo-msg-addr';
+            addr.textContent = fromAddr;
+            line.appendChild(addr);
+        }
+
+        var date = doc.createElement('span');
+        date.className = 'meteo-msg-date';
+        date.textContent = dateText;
+        line.appendChild(date);
+
+        var line2 = doc.createElement('div');
+        line2.className = 'meteo-msg-line meteo-msg-to';
+
+        var env = (window.rcmail && rcmail.env) || {};
+        var outgoing = [env.sent_mailbox || 'Sent', env.drafts_mailbox || 'Drafts', env.trash_mailbox || 'Trash'];
+        var toText = 'a moi';
+        if (outgoing.indexOf(window.__meteoReadMbox || '') !== -1) {
+            var toCell = header.querySelector('td.header.to');
+            toText = 'a ' + (toCell ? toCell.textContent.trim() : 'destinataire');
+        }
+        var to = doc.createElement('span');
+        to.textContent = toText;
+        line2.appendChild(to);
+
+        var addLink = summary.querySelector('a.rcmaddcontact');
+        if (addLink) {
+            var clone = addLink.cloneNode(true);
+            clone.className = 'meteo-msg-add';
+            clone.textContent = 'Ajouter aux contacts';
+            line2.appendChild(clone);
+        }
+
+        meta.appendChild(line);
+        meta.appendChild(line2);
+        box.appendChild(avatar);
+        box.appendChild(meta);
+        content.insertBefore(box, content.firstChild);
+        summary.hidden = true;
+
+        var photo = header.querySelector('img.contactphoto');
+        if (photo) {
+            photo.hidden = true;
+        }
+    }
+
     function restyleReadFrame(frame) {
         var doc;
         try {
@@ -496,7 +617,12 @@
         } catch (err) {
             return;
         }
-        if (!doc || !doc.body || doc.querySelector('.meteo-reply-part')) {
+        if (!doc || !doc.body) {
+            return;
+        }
+        styleMessageHeader(doc);
+        tidyAttachments(doc);
+        if (doc.querySelector('.meteo-reply-part')) {
             return;
         }
         var text = doc.querySelector('#messagebody .rcmBody')
@@ -1060,7 +1186,7 @@
     function interceptAllMail() {
         document.addEventListener('click', function (ev) {
             var tile = ev.target && ev.target.closest
-                ? ev.target.closest('a.meteo-tile-all') : null;
+                ? ev.target.closest('a.meteo-all-link, a.meteo-tile-all') : null;
             if (!tile) {
                 return;
             }
@@ -1119,6 +1245,7 @@
         interceptCompose();
         interceptRead();
         interceptAllMail();
+        loadAgents();
         watchReadFrame();
         composeToFromUrl();
         bindKeys();

@@ -1,7 +1,7 @@
 ---
 type: handoff
 status: active
-updated: 2026-10-24
+updated: 2026-10-25
 ---
 # Handoff
 
@@ -34,12 +34,12 @@ Pull before work, push after. The Windows PC's own `origin` is the local path `C
 
 ## What works now
 
-- The skin is deployed and matches the repository: `meteo.js` md5 `be0b254e…`, `meteo.css` md5 `4e50ce78…`.
-- Message reading: conversation bubbles (sender on the left, the user's green on the right, reversed for sent mail), quoted replies, attachment list, photo preview card, and now a full-screen photo viewer when a photo is clicked (button Fermer, Échap).
+- The skin is deployed and matches the repository: `meteo.js` md5 `90e99c34…`, `meteo.css` md5 `7428e685…`, `mail.html` md5 `2292a760…`.
+- Inbox: a single yellow « Ecrire » button; « Tous les messages » is a quiet link in the list header and searches across folders in AJAX; unread counts sit in the folder sidebar.
+- Message reading: Gmail/Proton-style header (round initials avatar, sender name, address, date, « à moi » or « à … » for sent mail), actions as icon buttons (reply, reply all, forward, print, restore/delete in trash), conversation bubbles, quoted replies, attachment list, and a full-screen photo viewer when a photo is clicked (button Fermer, Échap).
 - Settings: three cards — dark mode, personal signature (kept in the browser and inserted into the composer), seven-point user guide — plus a discreet advanced options link.
-- Inbox: "Tous les messages" searches across folders in AJAX; unread badge; contact directory with "Écrire".
 - Lab demonstration data: luc INBOX uid 24 holds the photo message (`1743573864817.jpg`, 642 ko) that was only in tiana's Sent folder. `doveadm save` was used to put it there; it is not a real SMTP delivery.
-- Last verified 2026-10-24 by `recette-photo4.js`: viewer opens and loads, close button and Échap work, settings still has three cards. Screenshot `pw\P7-viewer.png`.
+- Last verified 2026-10-25 by `recette-design.js` (all-mail link, Gmail header, icon bar, reply prefill, settings, dark mode), `recette-photo4.js` (viewer, bubbles, settings) and `design-check.js` (BAR/READ probes). Screenshots `pw\N1-inbox.png` to `pw\N4-mobile.png`.
 
 ## What is broken
 
@@ -56,15 +56,17 @@ Pull before work, push after. The Windows PC's own `origin` is the local path `C
 
 The shipped files must match the source:
 
-    ssh -i "%TEMP%\opencode\labo_agent" -p 2222 -o StrictHostKeyChecking=no messagerie@127.0.0.1 "md5sum /var/www/roundcube/skins/meteo/meteo.js /var/www/roundcube/skins/meteo/styles/meteo.css"
+    ssh -i "%TEMP%\opencode\labo_agent" -p 2222 -o StrictHostKeyChecking=no messagerie@127.0.0.1 "md5sum /var/www/roundcube/skins/meteo/meteo.js /var/www/roundcube/skins/meteo/styles/meteo.css /var/www/roundcube/skins/meteo/templates/mail.html"
 
 Compare with `Get-FileHash -Algorithm MD5` on the same files under `labo/skins/meteo/`.
 
-Photo viewer, end to end: log in as luc, open the "photo" message (uid 24), click the preview — the photo must fill the screen with a round close button; Échap must close it. The script that proved it is `C:\Users\WINDOWS 10\AppData\Local\Temp\opencode\pw\recette-photo4.js`.
+Layout and features, end to end: `C:\Users\WINDOWS 10\AppData\Local\Temp\opencode\pw\recette-design.js` must print seven PASS (all-mail link, Gmail header, icon bar, reply prefill, settings, dark mode). `recette-photo4.js` proves the photo viewer, bubbles and settings; `design-check.js` prints the BAR and READ probes and writes `N1`–`N4` screenshots.
+
+Photo viewer, end to end: log in as luc, open the "photo" message (uid 24), click the preview — the photo must fill the screen with a round close button; Échap must close it.
 
 ## Do not
 
 - Do not resume session `ses_ecf512874ffeITb4u48KiF0D1C` to find context. It ran to 2,705 messages, ended on provider quota, and costs more than it carries. Read this file and the last two handoff records instead.
 - Do not commit `labo/systemd/*` or `labo/DESIGN-mintlify.md`.
 
-Checked: 2026-10-24
+Checked: 2026-10-25
