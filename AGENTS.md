@@ -44,4 +44,4 @@ No passwords, tokens, private keys or real user addresses in committed files.
 
 ## 6. The lab
 
-The target VM and the deploy path are described in `HANDOFF.md`. Deploy only from the Windows PC that can reach it.
+GitHub is the storage of the project and the source of updates. The target VM is the deploy target only; its access path is described in `HANDOFF.md`. Deploy only from the Windows PC that can reach it.

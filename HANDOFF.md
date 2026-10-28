@@ -1,7 +1,7 @@
 ---
 type: handoff
 status: active
-updated: 2026-10-25
+updated: 2026-10-28
 ---
 # Handoff
 
@@ -11,30 +11,31 @@ Webmail for Météo Madagascar: a Roundcube skin in `labo/skins/meteo`, deployed
 
 | Piece | Location |
 |---|---|
-| Canonical repository | bare repo `C:\repos\mail.git` on desktop-snl329v (100.94.160.92) |
-| Working clone (Windows PC) | `C:\MAIL_MESSAGERIE` |
+| Canonical repository | https://github.com/fanasinahenintsoa73-design/PROJET_RESEAU (public, branch `main`) |
+| Working clone (Windows PC) | `C:\MAIL_MESSAGERIE`, remote `origin` = GitHub |
+| Mirror on the desktop | bare repo `C:\repos\mail.git`, remote `desktop` on this PC |
 | Skin source | `labo/skins/meteo/`: `meteo.js`, `styles/meteo.css`, `templates/mail.html` |
 | Deploy target | `messagerie@127.0.0.1:2222`, files in `/var/www/roundcube/skins/meteo/` |
 | Deploy key | `C:\Users\WINDOWS 10\AppData\Local\Temp\opencode\labo_agent` |
 | Lab URL | https://webmail.meteo-test.lan/ and https://127.0.0.1:8443/ |
 | Lab account | luc.ranaivo@meteo-test.lan, password in the lab provisioning |
 
-## How the two PCs share work
+## How work moves
 
-`origin` is the bare repo on the Windows PC. Any other machine clones it and works in its own checkout.
+GitHub is the storage and the source of updates. Any machine clones it:
 
-    git -c protocol.ext.allow=always clone "ext::ssh snl329v git-upload-pack C:/repos/mail.git" C:/MAIL_MESSAGERIE
-    cd C:/MAIL_MESSAGERIE
-    git config protocol.ext.allow always
-    git config remote.origin.pushurl "ext::ssh snl329v git-receive-pack C:/repos/mail.git"
+    git clone https://github.com/fanasinahenintsoa73-design/PROJET_RESEAU.git C:/MAIL_MESSAGERIE
 
-The `ext::` form exists because git quotes the remote path for a POSIX shell and cmd.exe keeps those quotes, which makes a plain `ssh://` URL fail on that host. `snl329v` is the SSH alias: `HostName 100.94.160.92`, `User "windows 10"`.
+The repository is public, so cloning needs no key. Pushing needs an account: HTTPS through the `gh` credential helper already configured on this PC (`gh auth status`), or an SSH key added to the GitHub account. `ssh -T git@github.com` fails here today, so use HTTPS.
 
-Pull before work, push after. The Windows PC's own `origin` is the local path `C:\repos\mail.git`.
+Pull before work, push after. This PC keeps `desktop` (`C:\repos\mail.git`) as a local mirror: `git push origin main && git push desktop main`. The bare repo's `HEAD` points at `main`; `desktop/master` is left at `6b8a8d1` and must not drift.
+
+Changes reach the meteo server only through this PC, which is the only one that can reach the VM: commit, push to GitHub, deploy from `labo/scripts/19-deploy-skin.sh`, then read back the md5.
 
 ## What works now
 
 - The skin is deployed and matches the repository: `meteo.js` md5 `90e99c34…`, `meteo.css` md5 `7428e685…`, `mail.html` md5 `2292a760…`.
+- The project is published: public GitHub repository, branch `main`, tip `6b8a8d1` (2026-10-28). GitHub is now the storage and the source of updates; the VM only receives deployments.
 - Inbox: a single yellow « Ecrire » button; « Tous les messages » is a quiet link in the list header and searches across folders in AJAX; unread counts sit in the folder sidebar.
 - Message reading: Gmail/Proton-style header (round initials avatar, sender name, address, date, « à moi » or « à … » for sent mail), actions as icon buttons (reply, reply all, forward, print, restore/delete in trash), conversation bubbles, quoted replies, attachment list, and a full-screen photo viewer when a photo is clicked (button Fermer, Échap).
 - Settings: three cards — dark mode, personal signature (kept in the browser and inserted into the composer), seven-point user guide — plus a discreet advanced options link.
@@ -69,4 +70,4 @@ Photo viewer, end to end: log in as luc, open the "photo" message (uid 24), clic
 - Do not resume session `ses_ecf512874ffeITb4u48KiF0D1C` to find context. It ran to 2,705 messages, ended on provider quota, and costs more than it carries. Read this file and the last two handoff records instead.
 - Do not commit `labo/systemd/*` or `labo/DESIGN-mintlify.md`.
 
-Checked: 2026-10-25
+Checked: 2026-10-28
