@@ -960,17 +960,28 @@ body.task-mail:not(.action-compose) #layout-list {
 	overflow: hidden;
 }
 
+/* Le panneau tient dans la hauteur de la fenetre : entrees compactes, marges
+   serrees, et aucune barre de defilement visible. Le defilement reste possible
+   a la molette pour les fenetres vraiment courtes, sans occuper de place. */
 .meteo-side-scroll {
 	overflow-y: auto;
 	height: 100%;
-	padding: .7rem .8rem 1.4rem;
+	padding: .5rem .7rem .6rem;
+	scrollbar-width: none;
+	-ms-overflow-style: none;
+}
+
+.meteo-side-scroll::-webkit-scrollbar {
+	width: 0;
+	height: 0;
 }
 
 .meteo-side-title {
-	margin: 1rem .2rem .4rem;
+	margin: .75rem .2rem .25rem;
 	color: var(--meteo-muted);
 	font-size: .72rem;
 	font-weight: 600;
+	line-height: 1.3;
 }
 
 .meteo-side-scroll > .meteo-side-title:first-child {
@@ -989,10 +1000,11 @@ body.task-mail:not(.action-compose) #layout-list {
 	display: flex;
 	align-items: center;
 	gap: .45rem;
-	padding: .45rem .55rem;
+	padding: .32rem .5rem;
 	border-radius: 6px;
 	color: var(--meteo-body);
 	font-size: .84rem;
+	line-height: 1.35;
 	text-decoration: none;
 }
 
@@ -1030,10 +1042,11 @@ body.task-mail:not(.action-compose) #layout-list {
 	display: flex;
 	align-items: center;
 	gap: .45rem;
-	padding: .45rem .55rem;
+	padding: .36rem .5rem;
 	border-radius: 6px;
 	color: var(--meteo-body);
 	font-size: .84rem;
+	line-height: 1.35;
 	text-decoration: none;
 }
 
@@ -1065,6 +1078,27 @@ body.task-mail:not(.action-compose) #layout-list {
 	margin-left: auto;
 	color: var(--meteo-muted);
 	font-size: .72rem;
+}
+
+/* Fenetre haute : on rend au menu l'aisance qu'il avait, sans jamais
+   depasser la hauteur disponible sur un ecran court. */
+@media screen and (min-height: 700px) {
+	.meteo-side-scroll {
+		padding: .7rem .8rem .8rem;
+	}
+
+	.meteo-side-title {
+		margin: .95rem .2rem .35rem;
+	}
+
+	#meteo-folders li > a {
+		padding: .42rem .5rem;
+	}
+
+	.meteo-side-actions a,
+	.meteo-side-services a {
+		padding: .44rem .5rem;
+	}
 }
 
 .quota-widget {

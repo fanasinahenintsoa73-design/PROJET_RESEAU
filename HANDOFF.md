@@ -34,7 +34,8 @@ Changes reach the meteo server only through this PC, which is the only one that 
 
 ## What works now
 
-- The skin is deployed and matches the repository: `meteo.js` md5 `90e99c34…`, `meteo.css` md5 `7428e685…`, `mail.html` md5 `2292a760…`.
+- The skin is deployed and matches the repository: `meteo.js` md5 `90e99c34…`, `meteo.css` md5 `e895e437…`, `mail.html` md5 `2292a760…`.
+- Left menu: compact rows, no scrollbar; all sections (folders, actions, site, quota) fit at 1366×500, 1366×600 and 1366×768 and in the phone drawer.
 - The project is published: public GitHub repository, branch `main`, last content change `6b8a8d1` (2026-10-28). GitHub is now the storage and the source of updates; the VM only receives deployments.
 - Inbox: a single yellow « Ecrire » button; « Tous les messages » is a quiet link in the list header and searches across folders in AJAX; unread counts sit in the folder sidebar.
 - Message reading: Gmail/Proton-style header (round initials avatar, sender name, address, date, « à moi » or « à … » for sent mail), actions as icon buttons (reply, reply all, forward, print, restore/delete in trash), conversation bubbles, quoted replies, attachment list, and a full-screen photo viewer when a photo is clicked (button Fermer, Échap).
@@ -62,6 +63,8 @@ The shipped files must match the source:
 Compare with `Get-FileHash -Algorithm MD5` on the same files under `labo/skins/meteo/`.
 
 Layout and features, end to end: `C:\Users\WINDOWS 10\AppData\Local\Temp\opencode\pw\recette-design.js` must print seven PASS (all-mail link, Gmail header, icon bar, reply prefill, settings, dark mode). `recette-photo4.js` proves the photo viewer, bubbles and settings; `design-check.js` prints the BAR and READ probes and writes `N1`–`N4` screenshots.
+
+Left menu without scrolling: `pw\shot-menu.js` must print `over:0` at 1366×768, 1366×600 and 390×844 (phone drawer), and write `MENU-*.png`. `pw\probe-menu2.js` does the same measurement across mail, settings and contacts.
 
 Photo viewer, end to end: log in as luc, open the "photo" message (uid 24), click the preview — the photo must fill the screen with a round close button; Échap must close it.
 
