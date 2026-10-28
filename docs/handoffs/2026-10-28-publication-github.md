@@ -2,7 +2,7 @@
 type: handoff
 date: 2026-10-28
 status: done
-commit: 6b8a8d1
+commit: 8b7313b
 deployed: none
 ---
 # The project is published on GitHub (public, branch `main`) and GitHub is now the storage and update source
@@ -14,6 +14,7 @@ deployed: none
 - Former `origin` (bare repo `C:\repos\mail.git`) renamed to `desktop`; it also carries `main`, and its `HEAD` now points to `refs/heads/main` so a fresh clone checks out `main`.
 - `HANDOFF.md`: « Where it runs » and « How the two PCs share work » rewritten around GitHub; the deploy target is unchanged.
 - `AGENTS.md` §6: GitHub is stated as the storage and update source, the VM as the deploy target.
+- `README.md` added so the public repository explains itself; published tip is `8b7313b`.
 
 ## Why it changed
 

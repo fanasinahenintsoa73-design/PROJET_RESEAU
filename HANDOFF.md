@@ -35,7 +35,7 @@ Changes reach the meteo server only through this PC, which is the only one that 
 ## What works now
 
 - The skin is deployed and matches the repository: `meteo.js` md5 `90e99c34…`, `meteo.css` md5 `7428e685…`, `mail.html` md5 `2292a760…`.
-- The project is published: public GitHub repository, branch `main`, tip `6b8a8d1` (2026-10-28). GitHub is now the storage and the source of updates; the VM only receives deployments.
+- The project is published: public GitHub repository, branch `main`, tip `8b7313b` (2026-10-28). GitHub is now the storage and the source of updates; the VM only receives deployments.
 - Inbox: a single yellow « Ecrire » button; « Tous les messages » is a quiet link in the list header and searches across folders in AJAX; unread counts sit in the folder sidebar.
 - Message reading: Gmail/Proton-style header (round initials avatar, sender name, address, date, « à moi » or « à … » for sent mail), actions as icon buttons (reply, reply all, forward, print, restore/delete in trash), conversation bubbles, quoted replies, attachment list, and a full-screen photo viewer when a photo is clicked (button Fermer, Échap).
 - Settings: three cards — dark mode, personal signature (kept in the browser and inserted into the composer), seven-point user guide — plus a discreet advanced options link.
