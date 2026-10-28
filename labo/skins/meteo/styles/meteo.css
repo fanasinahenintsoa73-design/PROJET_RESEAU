@@ -1000,11 +1000,11 @@ body.task-mail:not(.action-compose) #layout-list {
 	display: flex;
 	align-items: center;
 	gap: .45rem;
-	padding: .32rem .5rem;
+	padding: .36rem .5rem;
 	border-radius: 6px;
 	color: var(--meteo-body);
-	font-size: .84rem;
-	line-height: 1.35;
+	font-size: .88rem;
+	line-height: 1.4;
 	text-decoration: none;
 }
 
@@ -1045,8 +1045,8 @@ body.task-mail:not(.action-compose) #layout-list {
 	padding: .36rem .5rem;
 	border-radius: 6px;
 	color: var(--meteo-body);
-	font-size: .84rem;
-	line-height: 1.35;
+	font-size: .88rem;
+	line-height: 1.4;
 	text-decoration: none;
 }
 
@@ -1080,24 +1080,39 @@ body.task-mail:not(.action-compose) #layout-list {
 	font-size: .72rem;
 }
 
-/* Fenetre haute : on rend au menu l'aisance qu'il avait, sans jamais
-   depasser la hauteur disponible sur un ecran court. */
-@media screen and (min-height: 700px) {
+/* Fenetre haute : on retrouve l'aisance d'avant (lignes larges, texte plus
+   grand), tout en restant sous la hauteur disponible. Sur un ecran court, le
+   menu reprend sa forme compacte pour ne jamais defiler. */
+@media screen and (min-height: 620px) {
 	.meteo-side-scroll {
-		padding: .7rem .8rem .8rem;
+		padding: .85rem .8rem 1rem;
 	}
 
 	.meteo-side-title {
-		margin: .95rem .2rem .35rem;
+		margin: 1.05rem .2rem .45rem;
+		font-size: .76rem;
 	}
 
 	#meteo-folders li > a {
-		padding: .42rem .5rem;
+		padding: .72rem .6rem;
+		font-size: .95rem;
+		line-height: 1.4;
 	}
 
 	.meteo-side-actions a,
 	.meteo-side-services a {
-		padding: .44rem .5rem;
+		padding: .72rem .6rem;
+		font-size: .95rem;
+		line-height: 1.4;
+	}
+
+	.meteo-side-services a {
+		font-size: .86rem;
+	}
+
+	.meteo-side-actions svg {
+		width: 1.15rem;
+		height: 1.15rem;
 	}
 }
 
