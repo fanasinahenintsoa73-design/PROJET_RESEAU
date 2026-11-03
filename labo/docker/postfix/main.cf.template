@@ -1,0 +1,62 @@
+# =============================================================================
+# main.cf du conteneur — derive de labo/postfix/main.cf.labo.
+# Les variables ${...} sont substituees au demarrage par entrypoint.sh.
+# Les variables Postfix ($mydomain, $myhostname...) ne sont PAS touchees.
+# =============================================================================
+
+compatibility_level = 2
+maillog_file = /dev/stdout
+
+myhostname = ${MAIL_HOSTNAME}
+mydomain   = ${MAIL_DOMAIN}
+myorigin   = $mydomain
+mydestination = $myhostname, localhost.$mydomain, localhost
+inet_interfaces = all
+inet_protocols = ipv4
+mynetworks = 127.0.0.0/8, 172.16.0.0/12
+
+# --- TLS (certificat auto-signe genere dans l'image ; Let's Encrypt en prod) --
+smtpd_tls_cert_file = /etc/postfix/tls/postfix.pem
+smtpd_tls_key_file  = /etc/postfix/tls/postfix.key
+smtpd_tls_security_level = may
+smtpd_tls_auth_only = yes
+smtpd_tls_protocols = TLSv1.2 TLSv1.3
+smtpd_tls_mandatory_protocols = TLSv1.2 TLSv1.3
+smtpd_tls_mandatory_ciphers = medium
+smtpd_tls_exclude_ciphers = aNULL, eNULL, EXPORT, DES, RC4, MD5, PSK, aECDH, SRP, IDEA
+smtpd_tls_loglevel = 1
+smtpd_tls_received_header = yes
+
+# --- Authentification SASL via Dovecot (socket partagee) ---------------------
+smtpd_sasl_type = dovecot
+smtpd_sasl_path = /var/run/dovecot/auth-client
+smtpd_sasl_auth_enable = yes
+smtpd_sasl_security_options = noanonymous
+smtpd_sasl_local_domain = $mydomain
+smtpd_sasl_authenticated_header = no
+broken_sasl_auth_clients = yes
+
+# --- Boites virtuelles lues dans MariaDB -------------------------------------
+virtual_mailbox_domains = $mydomain
+virtual_mailbox_base    = /var/vmail
+virtual_mailbox_maps    = mysql:/etc/postfix/sql/mailbox.cf
+virtual_alias_maps      = mysql:/etc/postfix/sql/alias.cf
+
+# Remise a Dovecot (LMTP) : sieve, quotas et regles utilisateur s'appliquent.
+virtual_transport = lmtp:unix:/var/run/dovecot/lmtp
+
+# --- Anti-spam : milter Rspamd (reseau Docker) -------------------------------
+smtpd_milters = inet:${RSPAMD_HOST}:11332
+non_smtpd_milters = inet:${RSPAMD_HOST}:11332
+milter_default_action = accept
+milter_protocol = 6
+
+# --- Limites -----------------------------------------------------------------
+message_size_limit = 52428800
+virtual_mailbox_limit = 0
+smtpd_reject_unlisted_recipient = yes
+
+# --- Anti-relais -------------------------------------------------------------
+smtpd_relay_restrictions = permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination
+smtpd_helo_required = yes
+disable_vrfy_command = yes

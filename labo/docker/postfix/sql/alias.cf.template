@@ -1,0 +1,6 @@
+# Carte Postfix : redirections et alias (table postfixadmin "alias").
+hosts = ${DB_HOST}
+dbname = ${DB_NAME}
+user = ${DB_USER}
+password = ${DB_PASSWORD}
+query = SELECT goto FROM alias WHERE address = '%s' AND active = 1

@@ -1,0 +1,59 @@
+<?php
+/* =============================================================================
+ * config.inc.php du conteneur — les ${...} sont substitues au demarrage.
+ * Derive de labo/web/roundcube-config.inc.php.labo.
+ * TLS interne : certificats auto-signes, verification desactivee (LABO only).
+ * ========================================================================== */
+
+$config = [];
+
+// --- Base de donnees --------------------------------------------------------
+$config['db_dsnw'] = 'mysql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}/${DB_NAME}';
+
+// --- IMAP / SMTP internes au reseau Docker -----------------------------------
+$config['default_host'] = 'ssl://${IMAP_HOST}';
+$config['default_port'] = ${IMAP_PORT};
+$config['imap_conn_options'] = [
+    'ssl' => [
+        'verify_peer'      => false,
+        'verify_peer_name' => false,
+    ],
+];
+
+$config['smtp_host'] = 'tls://${SMTP_HOST}:${SMTP_PORT}';
+$config['smtp_user'] = '%u';
+$config['smtp_pass'] = '%p';
+$config['smtp_conn_options'] = [
+    'ssl' => [
+        'verify_peer'      => false,
+        'verify_peer_name' => false,
+    ],
+];
+
+$config['managesieve_host'] = 'tls://${IMAP_HOST}:4190';
+$config['managesieve_conn_options'] = [
+    'ssl' => [
+        'verify_peer'      => false,
+        'verify_peer_name' => false,
+    ],
+];
+
+// --- Identite ----------------------------------------------------------------
+$config['product_name'] = 'Météo Madagascar — Labo Docker';
+$config['support_url']  = '';
+$config['des_key']      = '${RC_DES_KEY}';
+$config['username_domain'] = '${MAIL_DOMAIN}';
+$config['language']     = 'fr_FR';
+$config['skin']         = 'meteo';
+
+// --- Session et securite ------------------------------------------------------
+$config['session_lifetime']  = 30;
+$config['ip_check']          = true;
+$config['login_rate_limit']  = 5;
+$config['enable_installer']  = false;
+
+// --- Confort ------------------------------------------------------------------
+$config['plugins']        = ['archive', 'zipdownload', 'managesieve'];
+$config['draft_autosave'] = 300;
+$config['preview_pane']   = true;
+$config['htmleditor']     = 1;

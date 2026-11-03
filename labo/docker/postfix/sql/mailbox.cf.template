@@ -1,0 +1,6 @@
+# Carte Postfix : la boite existe-t-elle et est-elle active ?
+hosts = ${DB_HOST}
+dbname = ${DB_NAME}
+user = ${DB_USER}
+password = ${DB_PASSWORD}
+query = SELECT 1 FROM mailbox WHERE username = '%s' AND active = 1

@@ -1,0 +1,182 @@
+# =============================================================================
+# Stack Docker du webmail Meteo — banc d'essai EN PARALLELE du serveur natif.
+#
+# Regle de surete : aucun volume ne pointe vers /var/vmail, /var/lib/mysql,
+# /etc/postfix ou /etc/dovecot de l'hote. Les donnees du stack natif ne sont
+# jamais lues ni ecrites par ces conteneurs.
+#
+# Les ports publies sont DECALES (voir .env) pour ne pas entrer en conflit
+# avec Postfix/Dovecot/Apache deja en service.
+#
+# Tant que la recette n'est pas verte : `restart: "no"`. Un redemarrage de la
+# VM ne relance donc pas l'essai tout seul.
+# =============================================================================
+name: meteo-docker
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  # ---------------------------------------------------------------- base SQL
+  db:
+    image: mariadb:10.11
+    container_name: meteo-db
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?definir DB_ROOT_PASSWORD dans .env}
+      MARIADB_DATABASE: postfix
+      MARIADB_AUTO_UPGRADE: "1"
+      DB_ROUNDCUBE_PASSWORD: ${DB_ROUNDCUBE_PASSWORD:?}
+      DB_DOVECOT_PASSWORD: ${DB_DOVECOT_PASSWORD:?}
+      DB_POSTFIXADMIN_PASSWORD: ${DB_POSTFIXADMIN_PASSWORD:?}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    networks: [mailnet]
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: "no"
+    logging: *default-logging
+
+  # ------------------------------------------------------------------ anti-spam
+  rspamd:
+    image: rspamd/rspamd:3.8
+    container_name: meteo-rspamd
+    volumes:
+      - ../rspamd/local.d:/etc/rspamd/local.d:ro
+      - rspamd_data:/var/lib/rspamd
+    networks: [mailnet]
+    restart: "no"
+    logging: *default-logging
+
+  # --------------------------------------------------------------------- SMTP
+  postfix:
+    build:
+      context: ..
+      dockerfile: docker/postfix/Dockerfile
+    container_name: meteo-postfix
+    hostname: ${MAIL_HOSTNAME:-mail.meteo-test.lan}
+    environment:
+      MAIL_DOMAIN: ${MAIL_DOMAIN:-meteo-test.lan}
+      MAIL_HOSTNAME: ${MAIL_HOSTNAME:-mail.meteo-test.lan}
+      DB_HOST: db
+      DB_NAME: postfix
+      DB_USER: postfixadmin
+      DB_PASSWORD: ${DB_POSTFIXADMIN_PASSWORD:?}
+      RSPAMD_HOST: rspamd
+    ports:
+      - "${SMTP_PORT:-2525}:25"
+      - "${SUBMISSION_PORT:-2587}:587"
+      - "${SMTPS_PORT:-2465}:465"
+    volumes:
+      - vmail:/var/vmail
+      - dovecot_run:/var/run/dovecot
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [mailnet]
+    restart: "no"
+    logging: *default-logging
+
+  # --------------------------------------------------------------------- IMAP
+  dovecot:
+    build:
+      context: ..
+      dockerfile: docker/dovecot/Dockerfile
+    container_name: meteo-dovecot
+    hostname: ${MAIL_HOSTNAME:-mail.meteo-test.lan}
+    environment:
+      MAIL_DOMAIN: ${MAIL_DOMAIN:-meteo-test.lan}
+      DB_HOST: db
+      DB_NAME: postfix
+      DB_USER: dovecot
+      DB_PASSWORD: ${DB_DOVECOT_PASSWORD:?}
+    ports:
+      - "${IMAP_PORT:-1143}:143"
+      - "${IMAPS_PORT:-1993}:993"
+    volumes:
+      - vmail:/var/vmail
+      - dovecot_run:/var/run/dovecot
+      - dovecot_state:/var/lib/dovecot
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [mailnet]
+    restart: "no"
+    logging: *default-logging
+
+  # ------------------------------------------------------------------ webmail
+  roundcube:
+    build:
+      context: ..
+      dockerfile: docker/roundcube/Dockerfile
+      args:
+        RC_VERSION: "1.7.4"
+    container_name: meteo-roundcube
+    hostname: ${WEB_HOSTNAME:-webmail.meteo-test.lan}
+    environment:
+      MAIL_DOMAIN: ${MAIL_DOMAIN:-meteo-test.lan}
+      WEB_HOSTNAME: ${WEB_HOSTNAME:-webmail.meteo-test.lan}
+      DB_HOST: db
+      DB_NAME: roundcube
+      DB_USER: roundcube
+      DB_PASSWORD: ${DB_ROUNDCUBE_PASSWORD:?}
+      IMAP_HOST: dovecot
+      IMAP_PORT: "993"
+      SMTP_HOST: postfix
+      SMTP_PORT: "587"
+      RC_DES_KEY: ${RC_DES_KEY:?}
+    ports:
+      - "${WEB_PORT:-8444}:443"
+    volumes:
+      - ../skins/meteo:/opt/meteo-skin:ro
+      - rc_temp:/var/www/roundcube/temp
+      - rc_logs:/var/www/roundcube/logs
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [mailnet]
+    restart: "no"
+    logging: *default-logging
+
+  # -------------------------------------------------------------- postfixadmin
+  postfixadmin:
+    build:
+      context: ..
+      dockerfile: docker/postfixadmin/Dockerfile
+    container_name: meteo-postfixadmin
+    environment:
+      MAIL_DOMAIN: ${MAIL_DOMAIN:-meteo-test.lan}
+      DB_HOST: db
+      DB_NAME: postfix
+      DB_USER: postfixadmin
+      DB_PASSWORD: ${DB_POSTFIXADMIN_PASSWORD:?}
+    ports:
+      - "${ADMIN_PORT:-8081}:80"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [mailnet]
+    restart: "no"
+    logging: *default-logging
+
+networks:
+  mailnet:
+    driver: bridge
+
+volumes:
+  db_data:
+  vmail:
+  dovecot_run:
+  dovecot_state:
+  rspamd_data:
+  rc_temp:
+  rc_logs:

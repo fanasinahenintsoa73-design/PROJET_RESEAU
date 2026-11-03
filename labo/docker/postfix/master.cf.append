@@ -1,0 +1,28 @@
+# =============================================================================
+# Services ajoutes au master.cf du conteneur.
+# Noms differents de "submission"/"smtps" pour ne jamais entrer en conflit avec
+# les entrees (commentees ou non) du master.cf d'Ubuntu : le nom du service
+# est libre, seul le port compte.
+# =============================================================================
+submission_meteo inet n       -       n       -       -       smtpd
+  -o syslog_name=postfix/submission
+  -o smtpd_tls_security_level=encrypt
+  -o smtpd_sasl_auth_enable=yes
+  -o smtpd_sasl_type=dovecot
+  -o smtpd_sasl_path=/var/run/dovecot/auth-client
+  -o smtpd_sasl_security_options=noanonymous
+  -o smtpd_recipient_restrictions=permit_sasl_authenticated,reject
+  -o smtpd_reject_unlisted_recipient=no
+  -o milter_macro_daemon_name=ORIGINATING
+
+smtps_meteo inet n       -       n       -       -       smtpd
+  -o syslog_name=postfix/smtps
+  -o smtpd_tls_wrappermode=yes
+  -o smtpd_tls_security_level=encrypt
+  -o smtpd_sasl_auth_enable=yes
+  -o smtpd_sasl_type=dovecot
+  -o smtpd_sasl_path=/var/run/dovecot/auth-client
+  -o smtpd_sasl_security_options=noanonymous
+  -o smtpd_recipient_restrictions=permit_sasl_authenticated,reject
+  -o smtpd_reject_unlisted_recipient=no
+  -o milter_macro_daemon_name=ORIGINATING

@@ -1,0 +1,20 @@
+<?php
+/* =============================================================================
+ * config.local.php du conteneur — les ${...} sont substitues au demarrage.
+ * A verifier contre la version de PostfixAdmin au premier lancement.
+ * ========================================================================== */
+
+$CONF['configured'] = true;
+
+$CONF['database_type']     = 'mysqli';
+$CONF['database_host']     = '${DB_HOST}';
+$CONF['database_user']     = '${DB_USER}';
+$CONF['database_password'] = '${DB_PASSWORD}';
+$CONF['database_name']     = '${DB_NAME}';
+$CONF['database_prefix']   = '';
+
+$CONF['domain_path']        = 'NO';
+$CONF['domain_in_mailbox']  = 'YES';
+$CONF['default_domain']     = '${MAIL_DOMAIN}';
+
+$CONF['admin_email']        = 'admin@${MAIL_DOMAIN}';

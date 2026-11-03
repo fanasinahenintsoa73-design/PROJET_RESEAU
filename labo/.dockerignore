@@ -1,0 +1,7 @@
+# Contexte de build Docker : labo/
+# Seuls le skin et les fichiers de deploiement sont necessaires.
+prod/
+simulateur/
+DESIGN-mintlify.md
+**/*.md
+**/.git

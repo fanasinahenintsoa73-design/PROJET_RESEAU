@@ -36,7 +36,7 @@ Les changements n'atteignent le serveur météo que par ce PC, le seul à joindr
 
 ## Docker
 
-Un stack conteneurisé est en préparation dans `labo/docker/` (voir le dernier enregistrement de passation). Rien n'a été construit ni lancé : la commande `docker` n'existe pas sur ce PC Windows, et la VM n'a pas encore été inspectée. La direction retenue est un stack **en parallèle** (ports propres, volumes propres, aucun montage de `/var/vmail` ni de la base du système), pour ne jamais toucher aux données du labo.
+Un squelette est écrit dans `labo/docker/` : six services (MariaDB, Rspamd, Postfix, Dovecot, Roundcube 1.7.4 + skin, PostfixAdmin), ports décalés 2525/2587/2465/1143/1993/8444/8081, volumes nommés, `restart: "no"`. Rien n'a été construit ni lancé : la commande `docker` n'existe pas sur ce PC Windows, et la VM n'a pas encore été inspectée. La direction retenue est un stack **en parallèle** (ports propres, volumes propres, aucun montage de `/var/vmail` ni de la base du système), pour ne jamais toucher aux données du labo. Détail et points restants : `docs/handoffs/2026-11-03-squelette-docker.md`.
 
 ## Ce qui marche
 
@@ -60,7 +60,7 @@ Un stack conteneurisé est en préparation dans `labo/docker/` (voir le dernier 
 
 1. Rétablir l'accès SSH : sur la VM, ajouter la clé publique de `C:\Users\WINDOWS 10\.ssh\meteo_labo.pub` à `~/.ssh/authorized_keys`, puis vérifier que `ssh -i "$HOME/.ssh/meteo_labo" -p 2222 messagerie@127.0.0.1 "echo OK"` affiche `OK`.
 2. Déployer l'espacement du menu en attente (commit du 2026-11-03), vérifier `DEPLOIEMENT DU SKIN OK` et l'égalité du md5 de `meteo.css` avec le dépôt.
-3. Relire le squelette Docker dans `labo/docker/`, puis faire l'inventaire serveur en lecture seule avant de lancer le moindre conteneur.
+3. Relire `labo/docker/README.md`, puis sur la VM : `docker compose config -q`, `docker compose build`, import des schémas SQL, création d'une boîte de test et recette. Faire d'abord l'inventaire serveur en lecture seule.
 4. Toujours ouvert, indépendant de Docker : reproduire un envoi réel avec pièce jointe de tiana vers luc par le composeur, et confirmer la transaction SMTP dans `/var/log/mail.log`.
 
 ## Comment vérifier
