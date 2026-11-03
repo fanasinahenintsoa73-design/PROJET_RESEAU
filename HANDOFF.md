@@ -3,85 +3,85 @@ type: handoff
 status: active
 updated: 2026-11-03
 ---
-# Handoff
+# Passation
 
-Webmail for Météo Madagascar: a Roundcube skin in `labo/skins/meteo`, deployed to a lab VM. This file holds the current state; `docs/handoffs/` holds one record per major change.
+Webmail de Météo Madagascar : un skin Roundcube dans `labo/skins/meteo`, déployé sur une VM de labo. Ce fichier porte l'état courant ; `docs/handoffs/` contient un enregistrement par changement majeur.
 
-## Where it runs
+## Où cela tourne
 
-| Piece | Location |
+| Élément | Emplacement |
 |---|---|
-| Canonical repository | https://github.com/fanasinahenintsoa73-design/PROJET_RESEAU (public, branch `main`) |
-| Working clone (Windows PC) | `C:\MAIL_MESSAGERIE`, remote `origin` = GitHub |
-| Mirror on the desktop | bare repo `C:\repos\mail.git`, remote `desktop` on this PC |
-| Skin source | `labo/skins/meteo/`: `meteo.js`, `styles/meteo.css`, `templates/mail.html` |
-| Deploy target | `messagerie@127.0.0.1:2222`, files in `/var/www/roundcube/skins/meteo/` |
-| Deploy key | `C:\Users\WINDOWS 10\.ssh\meteo_labo` — new key generated 2026-11-03, **not yet authorised on the VM**; the old `%TEMP%\opencode\labo_agent` was deleted by the Windows temp cleanup |
-| Lab URL | https://webmail.meteo-test.lan/ and https://127.0.0.1:8443/ |
-| Lab account | luc.ranaivo@meteo-test.lan, password in the lab provisioning |
+| Dépôt de référence | https://github.com/fanasinahenintsoa73-design/PROJET_RESEAU (public, branche `main`) |
+| Clone de travail (PC Windows) | `C:\MAIL_MESSAGERIE`, remote `origin` = GitHub |
+| Miroir sur le poste | dépôt nu `C:\repos\mail.git`, remote `desktop` |
+| Source du skin | `labo/skins/meteo/` : `meteo.js`, `styles/meteo.css`, `templates/mail.html` |
+| Cible de déploiement | `messagerie@127.0.0.1:2222`, fichiers dans `/var/www/roundcube/skins/meteo/` |
+| Clé de déploiement | `C:\Users\WINDOWS 10\.ssh\meteo_labo` — nouvelle clé du 2026-11-03, **pas encore autorisée sur la VM** ; l'ancienne `%TEMP%\opencode\labo_agent` a été effacée par le nettoyage temporaire de Windows |
+| URL du labo | https://webmail.meteo-test.lan/ et https://127.0.0.1:8443/ |
+| Compte du labo | luc.ranaivo@meteo-test.lan, mot de passe dans le provisionnement du labo |
 
-## How work moves
+## Comment le travail circule
 
-GitHub is the storage and the source of updates. Any machine clones it:
+GitHub est le stockage et la source des mises à jour. N'importe quelle machine le clone :
 
     git clone https://github.com/fanasinahenintsoa73-design/PROJET_RESEAU.git C:/MAIL_MESSAGERIE
 
-The repository is public, so cloning needs no key. Pushing needs an account: HTTPS through the `gh` credential helper already configured on this PC (`gh auth status`), or an SSH key added to the GitHub account. `ssh -T git@github.com` fails here today, so use HTTPS.
+Le dépôt est public : le clone ne demande aucune clé. Le push demande un compte : HTTPS via l'aide d'identification `gh` déjà configurée sur ce PC (`gh auth status`), ou une clé SSH ajoutée au compte GitHub. `ssh -T git@github.com` échoue ici aujourd'hui, donc utiliser HTTPS.
 
-Pull before work, push after. This PC keeps `desktop` (`C:\repos\mail.git`) as a local mirror: `git push origin main && git push desktop main`. The bare repo's `HEAD` points at `main`; `desktop/master` is left at `6b8a8d1` and must not drift.
+Tirer avant de travailler, pousser après. Ce PC garde `desktop` (`C:\repos\mail.git`) comme miroir local : `git push origin main && git push desktop main`. Le `HEAD` du dépôt nu pointe sur `main` ; `desktop/master` reste figé à `6b8a8d1` et ne doit pas bouger.
 
-Changes reach the meteo server only through this PC, which is the only one that can reach the VM: commit, push to GitHub, deploy from `labo/scripts/19-deploy-skin.sh`, then read back the md5.
+Les changements n'atteignent le serveur météo que par ce PC, le seul à joindre la VM : commit, push vers GitHub, déploiement par `labo/scripts/19-deploy-skin.sh`, puis relecture des md5.
 
-**Access is currently blocked.** The deploy key that lived in `%TEMP%` was removed by the Windows temp cleanup between sessions. A replacement key exists at `C:\Users\WINDOWS 10\.ssh\meteo_labo`, but its public key has not been added to `~/.ssh/authorized_keys` on the VM yet, so every SSH call returns `Permission denied (publickey,password)`. Until that line is added, deployment and md5 read-back are impossible.
+**L'accès est actuellement bloqué.** La clé de déploiement qui vivait dans `%TEMP%` a été supprimée par le nettoyage de Windows entre deux sessions. Une clé de remplacement existe dans `C:\Users\WINDOWS 10\.ssh\meteo_labo`, mais sa clé publique n'a pas encore été ajoutée à `~/.ssh/authorized_keys` sur la VM : tout appel SSH renvoie `Permission denied (publickey,password)`. Tant que cette ligne n'est pas ajoutée, ni le déploiement ni la relecture des md5 ne sont possibles.
 
 ## Docker
 
-A containerised stack is being prepared in `labo/docker/` (see the latest handoff record). Nothing has been built or run: the Docker CLI is not installed on this Windows PC, and the VM has not been inspected yet. The chosen direction is a **parallel** stack (own ports, own volumes, no mount of `/var/vmail` or the system database), so existing lab data is never touched.
+Un stack conteneurisé est en préparation dans `labo/docker/` (voir le dernier enregistrement de passation). Rien n'a été construit ni lancé : la commande `docker` n'existe pas sur ce PC Windows, et la VM n'a pas encore été inspectée. La direction retenue est un stack **en parallèle** (ports propres, volumes propres, aucun montage de `/var/vmail` ni de la base du système), pour ne jamais toucher aux données du labo.
 
-## What works now
+## Ce qui marche
 
-- The skin is deployed and matches the repository: `meteo.js` md5 `90e99c34…`, `meteo.css` md5 `225249c8…`, `mail.html` md5 `2292a760…`.
-- Left menu: wide rows on normal screens, compact on short windows, never a scrollbar; all sections (folders, actions, site, quota) stay visible from 1366×500 up. Since 2026-11-03 the bottom group (« Site officiel ») is anchored at the bottom of the panel with a hairline above it, and « Actions » sits further from the folders — **this spacing change is committed but not deployed yet**.
-- The project is published: public GitHub repository, branch `main`, last content change `c20882c` (2026-10-28). GitHub is now the storage and the source of updates; the VM only receives deployments.
-- Inbox: a single yellow « Ecrire » button; « Tous les messages » is a quiet link in the list header and searches across folders in AJAX; unread counts sit in the folder sidebar.
-- Message reading: Gmail/Proton-style header (round initials avatar, sender name, address, date, « à moi » or « à … » for sent mail), actions as icon buttons (reply, reply all, forward, print, restore/delete in trash), conversation bubbles, quoted replies, attachment list, and a full-screen photo viewer when a photo is clicked (button Fermer, Échap).
-- Settings: three cards — dark mode, personal signature (kept in the browser and inserted into the composer), seven-point user guide — plus a discreet advanced options link.
-- Lab demonstration data: luc INBOX uid 24 holds the photo message (`1743573864817.jpg`, 642 ko) that was only in tiana's Sent folder. `doveadm save` was used to put it there; it is not a real SMTP delivery.
-- Last verified 2026-10-25 by `recette-design.js` (all-mail link, Gmail header, icon bar, reply prefill, settings, dark mode), `recette-photo4.js` (viewer, bubbles, settings) and `design-check.js` (BAR/READ probes). Screenshots `pw\N1-inbox.png` to `pw\N4-mobile.png`.
+- Le skin est déployé et identique au dépôt : `meteo.js` md5 `90e99c34…`, `meteo.css` md5 `225249c8…`, `mail.html` md5 `2292a760…`.
+- Menu de gauche : lignes larges sur écran normal, compact sur fenêtre courte, jamais de barre de défilement ; toutes les sections (dossiers, actions, site, quota) restent visibles dès 1366×500. Depuis le 2026-11-03, le groupe du bas (« Site officiel ») est ancré en bas du panneau avec un filet au-dessus, et « Actions » est plus éloigné des dossiers — **cet espacement est commité mais pas encore déployé**.
+- Le projet est publié : dépôt GitHub public, branche `main`, dernier changement de contenu `c20882c` (2026-10-28). GitHub est désormais le stockage et la source des mises à jour ; la VM ne reçoit que les déploiements.
+- Boîte de réception : un seul bouton jaune « Écrire » ; « Tous les messages » est un lien discret dans l'en-tête de liste et cherche dans tous les dossiers en AJAX ; les compteurs de non-lus sont dans la colonne des dossiers.
+- Lecture d'un message : en-tête façon Gmail/Proton (avatar rond avec initiales, nom de l'expéditeur, adresse, date, « à moi » ou « à … » pour les envois), actions en icônes (répondre, répondre à tous, transférer, imprimer, restaurer/supprimer dans la corbeille), bulles de conversation, citations, liste des pièces jointes, et visionneuse photo plein écran au clic (bouton Fermer, Échap).
+- Réglages : trois cartes — mode sombre, signature personnelle (gardée dans le navigateur et insérée dans le composeur), guide utilisateur en sept points — plus un lien discret vers les options avancées.
+- Données de démonstration du labo : la boîte de réception de luc, uid 24, contient le message avec photo (`1743573864817.jpg`, 642 ko) qui n'existait que dans les Envoyés de tiana. Il a été placé par `doveadm save` ; ce n'est pas une remise SMTP réelle.
+- Dernière vérification le 2026-10-25 par `recette-design.js` (lien tous-les-messages, en-tête Gmail, barre d'icônes, préremplissage de réponse, réglages, mode sombre), `recette-photo4.js` (visionneuse, bulles, réglages) et `design-check.js` (sondes BAR/READ). Captures `pw\N1-inbox.png` à `pw\N4-mobile.png`.
 
-## What is broken
+## Ce qui est cassé
 
-- No SSH access to the VM: `ssh … messagerie@127.0.0.1` returns `Permission denied (publickey,password)` because the new public key is not in `~/.ssh/authorized_keys` yet. Deployments and md5 read-backs are blocked until it is.
-- Real delivery of a mail with a photo attachment has not been reproduced: the original message from tiana was only appended to Sent, with no SMTP transaction in `mail.log`. Cause unknown (interrupted send, draft, or manual copy).
-- Uncommitted on the Windows PC: `labo/systemd/*` modified, `labo/DESIGN-mintlify.md` untracked. Leave them alone until their owner says they are ready.
-- The lab VM hung once (SSH banner exchange aborted, guest network dead) and had to be powered off and restarted with `VBoxManage startvm server_messagerie --type headless`.
+- Plus d'accès SSH à la VM : `ssh … messagerie@127.0.0.1` renvoie `Permission denied (publickey,password)` car la nouvelle clé publique n'est pas encore dans `~/.ssh/authorized_keys`. Déploiements et relectures de md5 bloqués jusque-là.
+- La remise réelle d'un message avec photo n'a pas été reproduite : le message d'origine de tiana n'a été ajouté qu'aux Envoyés, sans transaction SMTP dans `mail.log`. Cause inconnue (envoi interrompu, brouillon, ou copie manuelle).
+- Non commité sur le PC Windows : `labo/systemd/*` modifiés, `labo/DESIGN-mintlify.md` non suivi. Les laisser tranquilles jusqu'à décision de leur propriétaire.
+- La VM de labo a déjà figé une fois (échange de bannière SSH interrompu, réseau invité mort) : il a fallu l'éteindre et la relancer avec `VBoxManage startvm server_messagerie --type headless`.
 
-## Next action
+## Prochaine action
 
-1. Restore SSH access: on the VM, append the public key of `C:\Users\WINDOWS 10\.ssh\meteo_labo.pub` to `~/.ssh/authorized_keys`, then confirm `ssh -i "$HOME/.ssh/meteo_labo" -p 2222 messagerie@127.0.0.1 "echo OK"` prints `OK`.
-2. Deploy the pending menu spacing (commit of 2026-11-03), check `DEPLOIEMENT DU SKIN OK` and that `meteo.css` md5 matches the repository.
-3. Review the Docker skeleton in `labo/docker/`, then run the read-only server inventory before starting any container.
-4. Still open, independent of Docker: reproduce a real send with an attachment from tiana to luc through the composer, and confirm the SMTP transaction in `/var/log/mail.log`.
+1. Rétablir l'accès SSH : sur la VM, ajouter la clé publique de `C:\Users\WINDOWS 10\.ssh\meteo_labo.pub` à `~/.ssh/authorized_keys`, puis vérifier que `ssh -i "$HOME/.ssh/meteo_labo" -p 2222 messagerie@127.0.0.1 "echo OK"` affiche `OK`.
+2. Déployer l'espacement du menu en attente (commit du 2026-11-03), vérifier `DEPLOIEMENT DU SKIN OK` et l'égalité du md5 de `meteo.css` avec le dépôt.
+3. Relire le squelette Docker dans `labo/docker/`, puis faire l'inventaire serveur en lecture seule avant de lancer le moindre conteneur.
+4. Toujours ouvert, indépendant de Docker : reproduire un envoi réel avec pièce jointe de tiana vers luc par le composeur, et confirmer la transaction SMTP dans `/var/log/mail.log`.
 
-## How to verify
+## Comment vérifier
 
-The shipped files must match the source:
+Les fichiers livrés doivent correspondre à la source :
 
     ssh -i "%USERPROFILE%\.ssh\meteo_labo" -p 2222 -o StrictHostKeyChecking=no messagerie@127.0.0.1 "md5sum /var/www/roundcube/skins/meteo/meteo.js /var/www/roundcube/skins/meteo/styles/meteo.css /var/www/roundcube/skins/meteo/templates/mail.html"
 
-Compare with `Get-FileHash -Algorithm MD5` on the same files under `labo/skins/meteo/`.
+Comparer avec `Get-FileHash -Algorithm MD5` sur les mêmes fichiers sous `labo/skins/meteo/`.
 
-Layout and features, end to end: `C:\Users\WINDOWS 10\AppData\Local\Temp\opencode\pw\recette-design.js` must print seven PASS (all-mail link, Gmail header, icon bar, reply prefill, settings, dark mode). `recette-photo4.js` proves the photo viewer, bubbles and settings; `design-check.js` prints the BAR and READ probes and writes `N1`–`N4` screenshots.
+Disposition et fonctions, de bout en bout : `C:\Users\WINDOWS 10\AppData\Local\Temp\opencode\pw\recette-design.js` doit afficher sept PASS (lien tous-les-messages, en-tête Gmail, barre d'icônes, préremplissage de réponse, réglages, mode sombre). `recette-photo4.js` prouve la visionneuse photo, les bulles et les réglages ; `design-check.js` affiche les sondes BAR et READ et écrit les captures `N1` à `N4`.
 
-Left menu without scrolling: `pw\probe-tiers.js` must print `over:0` with positive `free` at heights 768, 650, 620, 600 and 500, and `pw\shot-menu.js` must print `over:0` at 1366×768, 1366×600 and 390×844 (phone drawer), writing `MENU-*.png`.
+Menu de gauche sans défilement : `pw\probe-tiers.js` doit afficher `over:0` avec un `free` positif aux hauteurs 768, 650, 620, 600 et 500, et `pw\shot-menu.js` doit afficher `over:0` en 1366×768, 1366×600 et 390×844 (tiroir téléphone), en écrivant `MENU-*.png`.
 
-Menu spacing, before it is deployed: `pw\preview-menu.js` injects the local CSS into the live page. It must print `over:0` at 768, 650, 620, 600 and 500, with `gapTopBottom` (distance between « Actions » and « Site officiel ») growing with height — 328 px at 768, 210 px at 650 — and `free` around 8–14 px at the bottom of the panel. It writes `PREV-768.png` and `PREV-650.png`.
+Espacement du menu, avant déploiement : `pw\preview-menu.js` injecte le CSS local dans la page réelle. Il doit afficher `over:0` à 768, 650, 620, 600 et 500, avec `gapTopBottom` (distance entre « Actions » et « Site officiel ») qui grandit avec la hauteur — 328 px à 768, 210 px à 650 — et `free` autour de 8–14 px en bas du panneau. Il écrit `PREV-768.png` et `PREV-650.png`.
 
-Photo viewer, end to end: log in as luc, open the "photo" message (uid 24), click the preview — the photo must fill the screen with a round close button; Échap must close it.
+Visionneuse photo, de bout en bout : se connecter comme luc, ouvrir le message « photo » (uid 24), cliquer sur l'aperçu — la photo doit remplir l'écran avec un bouton de fermeture rond ; Échap doit la fermer.
 
-## Do not
+## À ne pas faire
 
-- Do not resume session `ses_ecf512874ffeITb4u48KiF0D1C` to find context. It ran to 2,705 messages, ended on provider quota, and costs more than it carries. Read this file and the last two handoff records instead.
-- Do not commit `labo/systemd/*` or `labo/DESIGN-mintlify.md`.
+- Ne pas reprendre la session `ses_ecf512874ffeITb4u48KiF0D1C` pour retrouver du contexte. Elle a tourné jusqu'à 2 705 messages, s'est arrêtée sur le quota du fournisseur, et coûte plus qu'elle n'apporte. Lire ce fichier et les deux derniers enregistrements de passation.
+- Ne pas commiter `labo/systemd/*` ni `labo/DESIGN-mintlify.md`.
 
-Checked: 2026-11-03
+Vérifié : 2026-11-03
