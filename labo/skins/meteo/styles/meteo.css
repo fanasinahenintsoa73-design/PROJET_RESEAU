@@ -964,11 +964,19 @@ body.task-mail:not(.action-compose) #layout-list {
    serrees, et aucune barre de defilement visible. Le defilement reste possible
    a la molette pour les fenetres vraiment courtes, sans occuper de place. */
 .meteo-side-scroll {
+	display: flex;
+	flex-direction: column;
 	overflow-y: auto;
 	height: 100%;
 	padding: .5rem .7rem .6rem;
 	scrollbar-width: none;
 	-ms-overflow-style: none;
+}
+
+/* Les blocs gardent leur hauteur naturelle : seule la marge elastique du
+   dernier groupe absorbe la place libre. */
+.meteo-side-scroll > * {
+	flex: 0 0 auto;
 }
 
 .meteo-side-scroll::-webkit-scrollbar {
@@ -986,6 +994,20 @@ body.task-mail:not(.action-compose) #layout-list {
 
 .meteo-side-scroll > .meteo-side-title:first-child {
 	margin-top: 0;
+}
+
+/* Deuxieme groupe : on l'eloigne du premier pour aerer le haut du menu. */
+.meteo-side-scroll > .meteo-side-title:nth-of-type(2) {
+	margin-top: 1.4rem;
+}
+
+/* Dernier groupe (« Site officiel » + quota) : pousse en bas du panneau, avec
+   un filet de separation. C'est lui qui prend la distance entre le menu haut
+   et le menu bas. */
+.meteo-side-scroll > .meteo-side-title:last-of-type {
+	margin-top: auto;
+	padding-top: .7rem;
+	border-top: 1px solid var(--meteo-hairline);
 }
 
 /* Les cinq boites : ce sont les vrais dossiers du moteur, avec leurs
